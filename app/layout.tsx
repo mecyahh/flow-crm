@@ -1,18 +1,20 @@
+import './globals.css'
+
 export const metadata = {
-  title: "One Percent Deal House",
-  description: "Insurance CRM",
-};
+  title: 'Flow',
+  description: 'Everything is flowing.',
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: "system-ui" }}>
+      <body>
         {children}
       </body>
     </html>
-  );
+  )
 }
