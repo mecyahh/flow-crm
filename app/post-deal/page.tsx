@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -21,16 +21,19 @@ export default function PostDealPage() {
   const [ready, setReady] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const [policyNumber, setPolicyNumber] = useState('')
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
-  const [dob, setDob] = useState('')
+  const [dob, setDob] = useState('') // yyyy-mm-dd
+  const [effectiveDate, setEffectiveDate] = useState('') // yyyy-mm-dd
+
+  const [company, setCompany] = useState<(typeof CARRIERS)[number]>('Aetna')
+  const [premium, setPremium] = useState('')
+  const [coverage, setCoverage] = useState('')
+
+  const [policyNumber, setPolicyNumber] = useState('')
   const [beneficiary, setBeneficiary] = useState('')
   const [beneficiaryRelationship, setBeneficiaryRelationship] =
     useState<(typeof RELATIONSHIPS)[number]>('Spouse')
-  const [coverage, setCoverage] = useState('')
-  const [premium, setPremium] = useState('')
-  const [company, setCompany] = useState<(typeof CARRIERS)[number]>('Aetna')
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
@@ -44,13 +47,13 @@ export default function PostDealPage() {
     })()
   }, [])
 
-  const premiumNumber = useMemo(() => parseMoneyToNumber(premium), [premium])
-  const coverageNumber = useMemo(() => parseMoneyToNumber(coverage), [coverage])
-
   async function submitDeal() {
     setMsg(null)
 
-    if (!fullName.trim() || !String(company).trim() || premiumNumber <= 0) {
+    const premiumNum = parseMoneyToNumber(premium)
+    const coverageNum = parseMoneyToNumber(coverage)
+
+    if (!fullName.trim() || !String(company).trim() || premiumNum <= 0) {
       setMsg('Full name, company, and premium are required.')
       return
     }
@@ -67,15 +70,16 @@ export default function PostDealPage() {
 
     const payload: any = {
       user_id: user.id,
-      policy_number: policyNumber.trim() || null,
       full_name: fullName.trim(),
       phone: normalizePhone(phone) || null,
       client_dob: dob || null,
+      effective_date: effectiveDate || null,
+      company: String(company).trim(),
+      premium: premiumNum,
+      coverage: coverageNum > 0 ? coverageNum : null,
+      policy_number: policyNumber.trim() || null,
       beneficiary: beneficiary.trim() || null,
       beneficiary_relationship: beneficiaryRelationship,
-      coverage: coverageNumber > 0 ? coverageNumber : null,
-      premium: premiumNumber,
-      company: String(company).trim(),
       notes: notes.trim() || null,
       status: 'Submitted',
     }
@@ -94,15 +98,16 @@ export default function PostDealPage() {
   }
 
   function clearForm() {
-    setPolicyNumber('')
     setFullName('')
     setPhone('')
     setDob('')
+    setEffectiveDate('')
+    setCompany('Aetna')
+    setPremium('')
+    setCoverage('')
+    setPolicyNumber('')
     setBeneficiary('')
     setBeneficiaryRelationship('Spouse')
-    setCoverage('')
-    setPremium('')
-    setCompany('Aetna')
     setNotes('')
   }
 
@@ -122,9 +127,7 @@ export default function PostDealPage() {
         <div className="flex items-end justify-between mb-8">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Post a Deal</h1>
-            <p className="text-sm text-white/60 mt-1">
-              Clean submission. No duplicates. Everything flows.
-            </p>
+            <p className="text-sm text-white/60 mt-1">Clean submission. Everything flows.</p>
           </div>
 
           <button
@@ -137,18 +140,7 @@ export default function PostDealPage() {
 
         <div className="glass p-7 max-w-3xl">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Policy Number">
-              <Input value={policyNumber} onChange={setPolicyNumber} placeholder="Policy #" />
-            </Field>
-
-            <Field label="Company *">
-              <Select
-                value={company}
-                onChange={(v) => setCompany(v as any)}
-                options={CARRIERS as any}
-              />
-            </Field>
-
+            {/* FULL NAME moved up */}
             <Field label="Full Name *">
               <Input value={fullName} onChange={setFullName} placeholder="John Doe" />
             </Field>
@@ -162,8 +154,13 @@ export default function PostDealPage() {
               />
             </Field>
 
+            {/* Modern glass date pickers */}
             <Field label="Client DOB">
-              <Input type="date" value={dob} onChange={setDob} />
+              <GlassDate value={dob} onChange={setDob} />
+            </Field>
+
+            <Field label="Company *">
+              <Select value={company} onChange={(v) => setCompany(v as any)} options={CARRIERS as any} />
             </Field>
 
             <Field label="Premium (monthly) *">
@@ -184,6 +181,16 @@ export default function PostDealPage() {
                 placeholder="250,000.00"
                 inputMode="decimal"
               />
+            </Field>
+
+            {/* Effective Date added next to coverage row (same style as DOB) */}
+            <Field label="Effective Date">
+              <GlassDate value={effectiveDate} onChange={setEffectiveDate} />
+            </Field>
+
+            {/* Policy # moved down */}
+            <Field label="Policy Number">
+              <Input value={policyNumber} onChange={setPolicyNumber} placeholder="Policy #" />
             </Field>
 
             <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -277,9 +284,7 @@ function Input({
       inputMode={inputMode}
       onChange={(e) => onChange(e.target.value)}
       onBlur={() => {
-        if (onBlurFormat === 'money') {
-          onChange(formatMoneyLive(value))
-        }
+        if (onBlurFormat === 'money') onChange(formatMoneyLive(value))
       }}
       className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-blue-500/60"
     />
@@ -327,6 +332,22 @@ function Select({
         </option>
       ))}
     </select>
+  )
+}
+
+/* Modern glass date input (replaces default “old” picker UI) */
+function GlassDate({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative">
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-blue-500/60
+                   [color-scheme:dark]"
+      />
+      <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/5" />
+    </div>
   )
 }
 
