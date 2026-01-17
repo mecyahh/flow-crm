@@ -27,59 +27,50 @@ export default function LeaderboardPage() {
   const chimeRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
-    load()
-  }, [])
+    // initial load
+    load(false)
 
-  // Poll + announce when #1 changes
-  useEffect(() => {
-    const id = setInterval(async () => {
-      const { data, error } = await supabase
-        .from('deals')
-        .select('agent_id, full_name, premium')
-        .order('created_at', { ascending: false })
-        .limit(5000)
-
-      if (error || !data) return
-
-      const top = computeAgents(data as any[])[0]
-      if (!top?.agent_id) return
-
-      const key = 'flow_leader_top1'
-      const prev = localStorage.getItem(key)
-
-      // initialize silently once
-      if (!prev) {
-        localStorage.setItem(key, top.agent_id)
-        return
-      }
-
-      if (prev !== top.agent_id) {
-        localStorage.setItem(key, top.agent_id)
-
-        const msg = `🏆 New #1: ${top.name}`
-        setToast(msg)
-        playChime()
-        notify(msg)
-
-        // refresh list in UI
-        setRows((prevRows) => prevRows) // no-op, then reload
-        await load()
-      }
-    }, 20000)
+    // polling loop
+    const id = setInterval(() => {
+      load(true)
+    }, 15000) // 15s
 
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function load() {
-    setLoading(true)
+  async function load(announceIfChanged: boolean) {
     const { data, error } = await supabase
       .from('deals')
       .select('id, agent_id, full_name, premium, created_at')
       .order('created_at', { ascending: false })
       .limit(5000)
 
-    if (!error && data) setRows(data as Row[])
+    if (error || !data) {
+      setLoading(false)
+      return
+    }
+
+    const nextRows = data as Row[]
+    const nextTop = computeAgents(nextRows)[0]
+
+    if (announceIfChanged && nextTop?.agent_id) {
+      const key = 'flow_leader_top1'
+      const prev = localStorage.getItem(key)
+
+      // initialize once silently
+      if (!prev) {
+        localStorage.setItem(key, nextTop.agent_id)
+      } else if (prev !== nextTop.agent_id) {
+        localStorage.setItem(key, nextTop.agent_id)
+        const msg = `🏆 New #1: ${nextTop.name}`
+        setToast(msg)
+        playChime()
+        notify(msg)
+      }
+    }
+
+    setRows(nextRows)
     setLoading(false)
   }
 
@@ -115,14 +106,11 @@ export default function LeaderboardPage() {
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
 
-      {/* Toast banner */}
       {toast && (
         <div className="fixed top-5 right-5 z-50">
           <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
-            <div className="text-xs text-white/60 mt-1">
-              Leaderboard updated live.
-            </div>
+            <div className="text-xs text-white/60 mt-1">Leaderboard updated.</div>
 
             <div className="mt-3 flex gap-2">
               <button
@@ -133,12 +121,9 @@ export default function LeaderboardPage() {
               </button>
               <button
                 className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 transition px-3 py-2 text-xs font-semibold"
-                onClick={() => {
-                  setToast(null)
-                  window.location.reload()
-                }}
+                onClick={() => setToast(null)}
               >
-                View
+                Let’s go
               </button>
             </div>
           </div>
@@ -149,9 +134,7 @@ export default function LeaderboardPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
-            <p className="text-sm text-white/60 mt-1">
-              Top producers — updated live.
-            </p>
+            <p className="text-sm text-white/60 mt-1">Top producers — live.</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -163,7 +146,7 @@ export default function LeaderboardPage() {
               Enable Alerts
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => load(true)}
               className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition"
             >
               Refresh
@@ -173,38 +156,14 @@ export default function LeaderboardPage() {
 
         {/* Top 3 podium */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
-          {/* #2 */}
           <div className="lg:col-span-4">
-            <PodiumCard
-              rank={2}
-              label="🥈 Runner Up"
-              agent={top2}
-              loading={loading}
-              accent="silver"
-            />
+            <PodiumCard rank={2} label="🥈 Runner Up" agent={top2} loading={loading} accent="silver" />
           </div>
-
-          {/* #1 */}
           <div className="lg:col-span-4">
-            <PodiumCard
-              rank={1}
-              label="🏆 CHAMPION"
-              agent={top1}
-              loading={loading}
-              accent="gold"
-              featured
-            />
+            <PodiumCard rank={1} label="🏆 CHAMPION" agent={top1} loading={loading} accent="gold" featured />
           </div>
-
-          {/* #3 */}
           <div className="lg:col-span-4">
-            <PodiumCard
-              rank={3}
-              label="🥉 Top 3"
-              agent={top3}
-              loading={loading}
-              accent="bronze"
-            />
+            <PodiumCard rank={3} label="🥉 Top 3" agent={top3} loading={loading} accent="bronze" />
           </div>
         </div>
 
@@ -217,9 +176,7 @@ export default function LeaderboardPage() {
             <div>Total Premium</div>
           </div>
 
-          {loading && (
-            <div className="px-6 py-10 text-center text-white/60">Loading…</div>
-          )}
+          {loading && <div className="px-6 py-10 text-center text-white/60">Loading…</div>}
 
           {!loading && agents.length === 0 && (
             <div className="px-6 py-10 text-center text-white/60">No data yet.</div>
@@ -243,7 +200,7 @@ export default function LeaderboardPage() {
   )
 }
 
-function computeAgents(rows: Array<any>) {
+function computeAgents(rows: Row[]) {
   const map = new Map<string, Agent>()
   for (const r of rows) {
     const id = r.agent_id
@@ -296,13 +253,7 @@ function PodiumCard({
   const titleSize = featured ? 'text-3xl' : 'text-2xl'
 
   return (
-    <div
-      className={[
-        'relative overflow-hidden rounded-2xl border bg-white/5 backdrop-blur-xl',
-        ring,
-        height,
-      ].join(' ')}
-    >
+    <div className={['relative overflow-hidden rounded-2xl border bg-white/5 backdrop-blur-xl', ring, height].join(' ')}>
       <div className={['pointer-events-none absolute inset-0 bg-gradient-to-br', accentStyles].join(' ')} />
       <div className="pointer-events-none absolute -top-10 left-10 h-40 w-40 rotate-12 rounded-full bg-white/10 blur-2xl" />
 
@@ -332,9 +283,7 @@ function PodiumCard({
         <div className="mt-5 grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
             <div className="text-[11px] text-white/55">Deals</div>
-            <div className="mt-1 text-lg font-semibold">
-              {loading ? '—' : agent?.deals ?? 0}
-            </div>
+            <div className="mt-1 text-lg font-semibold">{loading ? '—' : agent?.deals ?? 0}</div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
@@ -347,8 +296,7 @@ function PodiumCard({
 
         {featured && (
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/70">
-            <span className="text-white/50 mr-2">Energy:</span>
-            #1 spot claimed. Keep the pace.
+            <span className="text-white/50 mr-2">Energy:</span>#1 spot claimed. Keep the pace.
           </div>
         )}
       </div>
@@ -357,8 +305,5 @@ function PodiumCard({
 }
 
 function money(n: number) {
-  return Number(n || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })
+  return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
