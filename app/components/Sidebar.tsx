@@ -11,7 +11,6 @@ const NAV = [
   { label: 'Deal House', href: '/deal-house' },
   { label: 'Follow Ups', href: '/follow-ups' },
   { label: 'Analytics', href: '/analytics' },
-  { label: 'Team View', href: '/team' },
   { label: 'Settings', href: '/settings' },
 ] as const
 
