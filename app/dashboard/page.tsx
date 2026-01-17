@@ -32,16 +32,18 @@ export default function DashboardPage() {
 
         {/* Main content */}
         <main className="px-10 pb-12">
-          {/* KPI Row */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <KPI title="Today" value="0" sub="Deals submitted" />
-            <KPI title="This Week" value="0" sub="Deals submitted" />
-            <KPI title="This Month" value="0" sub="Deals submitted" />
+
+          {/* TOP KPI ROW (SWAPPED IN) */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <MiniStat label="Team Total" value="$0" />
+            <MiniStat label="Writing Agents" value="0" />
+            <MiniStat label="Top Carrier" value="—" />
           </section>
 
-          {/* Secondary Row */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-            {/* Trend */}
+          {/* SECOND ROW */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            {/* FLOW TREND */}
             <div className="lg:col-span-2 glass p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold">Flow Trend</h2>
@@ -52,14 +54,15 @@ export default function DashboardPage() {
                 Stock-style chart (next)
               </div>
 
-              <div className="grid grid-cols-3 gap-4 mt-5">
-                <MiniStat label="Team Total" value="$0" />
-                <MiniStat label="Writing Agents" value="0" />
-                <MiniStat label="Top Carrier" value="—" />
+              {/* KPI MOVED HERE */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <KPI title="Today" value="0" sub="Deals submitted" />
+                <KPI title="This Week" value="0" sub="Deals submitted" />
+                <KPI title="This Month" value="0" sub="Deals submitted" />
               </div>
             </div>
 
-            {/* Leaderboard */}
+            {/* LEADERBOARD */}
             <div className="glass p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold">Leaderboard</h2>
@@ -73,14 +76,10 @@ export default function DashboardPage() {
                 <Leader rank={4} name="Agent" amount="$0" />
                 <Leader rank={5} name="Agent" amount="$0" />
               </div>
-
-              <div className="mt-6 text-xs text-white/50">
-                Top 3 will display with premium styling once live data is wired.
-              </div>
             </div>
           </section>
 
-          {/* Activity */}
+          {/* ACTIVITY */}
           <section className="mt-6 glass p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Recent Activity</h2>
@@ -100,13 +99,15 @@ export default function DashboardPage() {
   )
 }
 
+/* COMPONENTS */
+
 function KPI({ title, value, sub }: { title: string; value: string; sub: string }) {
   return (
-    <div className="glass p-6">
-      <p className="text-sm text-white/60">{title}</p>
-      <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-4xl font-semibold tracking-tight">{value}</span>
-        <span className="text-sm text-white/50">{sub}</span>
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <p className="text-xs text-white/60">{title}</p>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-3xl font-semibold">{value}</span>
+        <span className="text-xs text-white/50">{sub}</span>
       </div>
     </div>
   )
@@ -114,9 +115,9 @@ function KPI({ title, value, sub }: { title: string; value: string; sub: string 
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <p className="text-xs text-white/60">{label}</p>
-      <p className="text-lg font-semibold mt-1">{value}</p>
+    <div className="glass p-6">
+      <p className="text-sm text-white/60">{label}</p>
+      <p className="text-2xl font-semibold mt-1">{value}</p>
     </div>
   )
 }
