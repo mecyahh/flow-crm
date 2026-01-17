@@ -26,7 +26,7 @@ export default function FlowLineChart() {
         data: values,
         tension: 0.4,
         borderWidth: 2,
-        borderColor: '#3B82F6', // blue
+        borderColor: '#3B82F6',
         pointRadius: 0,
         fill: true,
         backgroundColor: 'rgba(59,130,246,0.18)',
