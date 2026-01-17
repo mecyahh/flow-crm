@@ -10,19 +10,13 @@ type FollowUp = {
   full_name: string
   phone: string | null
   client_dob: string | null
-  beneficiary_name: string | null
-  beneficiary_dob: string | null
-  relationship: string | null
   coverage: number | null
-  premium: number | null
   company: string | null
   notes: string | null
   follow_up_at: string
-  status: 'open' | 'done' | 'converted'
+  status: string // open | done | converted
   created_at: string
 }
-
-const RELATIONSHIPS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Friend', 'Estate', 'Other'] as const
 
 const COMPANIES = [
   'Aetna',
@@ -34,6 +28,8 @@ const COMPANIES = [
   'Transamerica',
 ] as const
 
+type Preset = '24' | '48' | 'week' | 'custom' | null
+
 export default function FollowUpsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -43,27 +39,24 @@ export default function FollowUpsPage() {
 
   const chimeRef = useRef<HTMLAudioElement | null>(null)
 
-  // form state
+  // form (minimal fields)
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [clientDob, setClientDob] = useState('')
-  const [beneficiaryName, setBeneficiaryName] = useState('')
-  const [beneficiaryDob, setBeneficiaryDob] = useState('')
-  const [relationship, setRelationship] = useState<(typeof RELATIONSHIPS)[number] | ''>('')
   const [coverage, setCoverage] = useState('')
-  const [premium, setPremium] = useState('')
   const [company, setCompany] = useState<(typeof COMPANIES)[number] | ''>('')
   const [notes, setNotes] = useState('')
-  const [followUpAt, setFollowUpAt] = useState('') // datetime-local string
+  const [followUpAt, setFollowUpAt] = useState('') // datetime-local
+  const [preset, setPreset] = useState<Preset>(null)
 
-  // ---------- load + alerts ----------
+  // row follow-up action panel
+  const [activeRescheduleId, setActiveRescheduleId] = useState<string | null>(null)
+  const [rowPreset, setRowPreset] = useState<Record<string, Preset>>({})
+  const [rowFollowAt, setRowFollowAt] = useState<Record<string, string>>({})
+
   useEffect(() => {
     load()
-
-    const id = setInterval(() => {
-      load(true)
-    }, 15000)
-
+    const id = setInterval(() => load(true), 15000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -80,13 +73,12 @@ export default function FollowUpsPage() {
 
     const { data, error } = await supabase
       .from('follow_ups')
-      .select('*')
+      .select('id, agent_id, full_name, phone, client_dob, coverage, company, notes, follow_up_at, status, created_at')
       .order('follow_up_at', { ascending: true })
 
     if (!error && data) {
       const list = data as FollowUp[]
       setItems(list)
-
       if (announceDue) announceNewDue(list, uid)
     }
 
@@ -118,10 +110,8 @@ export default function FollowUpsPage() {
   function announceNewDue(list: FollowUp[], uid: string) {
     const now = Date.now()
     const dueNow = list.filter((x) => x.status === 'open' && new Date(x.follow_up_at).getTime() <= now)
-
     if (dueNow.length === 0) return
 
-    // prevent spamming the same due items
     const key = `flow_followups_notified_${uid}`
     const raw = localStorage.getItem(key)
     const seen = new Set<string>(raw ? JSON.parse(raw) : [])
@@ -139,9 +129,7 @@ export default function FollowUpsPage() {
     notify(msg)
   }
 
-  // ---------- computed ----------
   const now = Date.now()
-
   const due = useMemo(
     () => items.filter((x) => x.status === 'open' && new Date(x.follow_up_at).getTime() <= now),
     [items, now]
@@ -159,7 +147,24 @@ export default function FollowUpsPage() {
     return items
   }, [tab, due, upcoming, completed, items])
 
-  // ---------- actions ----------
+  function setPresetTime(p: Preset) {
+    setPreset(p)
+    if (p === '24') setFollowUpAt(toDatetimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)))
+    if (p === '48') setFollowUpAt(toDatetimeLocal(new Date(Date.now() + 48 * 60 * 60 * 1000)))
+    if (p === 'week') setFollowUpAt(toDatetimeLocal(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)))
+    if (p === 'custom') {
+      if (!followUpAt) setFollowUpAt(toDatetimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)))
+    }
+  }
+
+  function setRowPresetTime(id: string, p: Preset) {
+    setRowPreset((s) => ({ ...s, [id]: p }))
+    if (p === '24') setRowFollowAt((s) => ({ ...s, [id]: toDatetimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)) }))
+    if (p === '48') setRowFollowAt((s) => ({ ...s, [id]: toDatetimeLocal(new Date(Date.now() + 48 * 60 * 60 * 1000)) }))
+    if (p === 'week') setRowFollowAt((s) => ({ ...s, [id]: toDatetimeLocal(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)) }))
+    if (p === 'custom') setRowFollowAt((s) => ({ ...s, [id]: s[id] || toDatetimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)) }))
+  }
+
   async function submitFollowUp() {
     setSaving(true)
 
@@ -170,8 +175,7 @@ export default function FollowUpsPage() {
       return
     }
 
-    // default follow up time if empty
-    const followAt =
+    const followAtIso =
       followUpAt && followUpAt.trim().length > 0
         ? new Date(followUpAt).toISOString()
         : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
@@ -179,17 +183,13 @@ export default function FollowUpsPage() {
     const payload = {
       agent_id: uid,
       full_name: fullName.trim(),
-      phone: cleanPhone(phone),
+      phone: cleanPhone(phone) || null,
       client_dob: clientDob || null,
-      beneficiary_name: beneficiaryName.trim() || null,
-      beneficiary_dob: beneficiaryDob || null,
-      relationship: relationship || null,
       coverage: coverage ? Number(cleanMoney(coverage)) : null,
-      premium: premium ? Number(cleanMoney(premium)) : null,
       company: company || null,
       notes: notes.trim() || null,
-      follow_up_at: followAt,
-      status: 'open' as const,
+      follow_up_at: followAtIso,
+      status: 'open',
     }
 
     const { error } = await supabase.from('follow_ups').insert(payload)
@@ -200,95 +200,64 @@ export default function FollowUpsPage() {
       return
     }
 
-    // reset
     setFullName('')
     setPhone('')
     setClientDob('')
-    setBeneficiaryName('')
-    setBeneficiaryDob('')
-    setRelationship('')
     setCoverage('')
-    setPremium('')
     setCompany('')
     setNotes('')
     setFollowUpAt('')
+    setPreset(null)
 
     setToast('Follow up submitted ✅')
     setSaving(false)
     await load(false)
   }
 
-  async function markDone(id: string) {
-    await supabase.from('follow_ups').update({ status: 'done' }).eq('id', id)
+  async function closeDeal(fu: FollowUp) {
+    const qp = new URLSearchParams({
+      fu_id: fu.id,
+      full_name: fu.full_name || '',
+      phone: fu.phone || '',
+      client_dob: fu.client_dob || '',
+      company: fu.company || '',
+      coverage: fu.coverage?.toString() || '',
+      notes: fu.notes || '',
+    }).toString()
+
+    window.location.href = `/closed-deal?${qp}`
+  }
+
+  function toggleReschedule(fu: FollowUp) {
+    if (activeRescheduleId === fu.id) {
+      setActiveRescheduleId(null)
+      return
+    }
+    setActiveRescheduleId(fu.id)
+    setRowPreset((s) => ({ ...s, [fu.id]: '24' }))
+    setRowFollowAt((s) => ({ ...s, [fu.id]: toDatetimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)) }))
+  }
+
+  async function saveReschedule(id: string) {
+    const dtLocal = rowFollowAt[id]
+    if (!dtLocal) return
+    const iso = new Date(dtLocal).toISOString()
+    await supabase.from('follow_ups').update({ follow_up_at: iso }).eq('id', id)
+
+    setActiveRescheduleId(null)
+    setToast('Follow up updated ✅')
+    await load(false)
+  }
+
+  async function deniedCoverage(id: string) {
+    await supabase.from('follow_ups').update({ status: 'done', notes: 'Denied Coverage' }).eq('id', id)
+    setToast('Marked denied ✅')
     await load(false)
   }
 
   async function deleteFollowUp(id: string) {
     await supabase.from('follow_ups').delete().eq('id', id)
     await load(false)
-  }
-
-  async function markSold(fu: FollowUp) {
-    // Try: insert into deals with common columns.
-    // If schema doesn’t match, we redirect to Post a Deal with prefill so nothing is lost.
-    const userRes = await supabase.auth.getUser()
-    const uid = userRes.data.user?.id
-    if (!uid) return
-
-    const dealPayload: any = {
-      agent_id: uid,
-      full_name: fu.full_name,
-      client_name: fu.full_name, // fallback if your deals table uses client_name
-      phone: fu.phone,
-      dob: fu.client_dob,
-      client_dob: fu.client_dob,
-      beneficiary: fu.beneficiary_name,
-      beneficiary_name: fu.beneficiary_name,
-      beneficiary_dob: fu.beneficiary_dob,
-      relationship: fu.relationship,
-      coverage: fu.coverage,
-      premium: fu.premium,
-      company: fu.company,
-      carrier: fu.company,
-      notes: fu.notes,
-      note: fu.notes,
-    }
-
-    const { error } = await supabase.from('deals').insert(dealPayload)
-
-    if (!error) {
-      await supabase.from('follow_ups').update({ status: 'converted' }).eq('id', fu.id)
-      setToast('Converted to Deal ✅')
-      await load(false)
-      return
-    }
-
-    // fallback: prefill post-deal
-    const qp = new URLSearchParams({
-      full_name: fu.full_name || '',
-      phone: fu.phone || '',
-      client_dob: fu.client_dob || '',
-      beneficiary_name: fu.beneficiary_name || '',
-      beneficiary_dob: fu.beneficiary_dob || '',
-      relationship: fu.relationship || '',
-      coverage: fu.coverage?.toString() || '',
-      premium: fu.premium?.toString() || '',
-      company: fu.company || '',
-      notes: fu.notes || '',
-    }).toString()
-
-    setToast('Open Post a Deal (prefilled)')
-    window.location.href = `/post-deal?${qp}`
-  }
-
-  function quickSet(hoursFromNow: number) {
-    const d = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000)
-    setFollowUpAt(toDatetimeLocal(d))
-  }
-
-  function nextWeek() {
-    const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    setFollowUpAt(toDatetimeLocal(d))
   }
 
   return (
@@ -300,18 +269,8 @@ export default function FollowUpsPage() {
           <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
-              <button
-                className="flex-1 rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs"
-                onClick={() => setToast(null)}
-              >
-                Dismiss
-              </button>
-              <button
-                className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 transition px-3 py-2 text-xs font-semibold"
-                onClick={() => setToast(null)}
-              >
-                OK
-              </button>
+              <button className={btnSoft} onClick={() => setToast(null)}>Dismiss</button>
+              <button className={btnPrimary} onClick={() => setToast(null)}>OK</button>
             </div>
           </div>
         </div>
@@ -321,55 +280,31 @@ export default function FollowUpsPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Follow Ups</h1>
-            <p className="text-sm text-white/60 mt-1">Reminders + notifications.</p>
+            <p className="text-sm text-white/60 mt-1">Fast. Simple. No deals slipping.</p>
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={enableNotifications}
-              className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition"
-            >
-              Enable Alerts
-            </button>
-            <button
-              onClick={() => load(true)}
-              className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition"
-            >
-              Refresh
-            </button>
+            <button onClick={enableNotifications} className={btnGlass}>Enable Alerts</button>
+            <button onClick={() => load(true)} className={btnGlass}>Refresh</button>
           </div>
         </div>
 
-        {/* Tabs + counts */}
         <div className="mb-6 flex flex-wrap gap-3">
-          <Tab label={`Due (${due.length})`} active={tab === 'due'} onClick={() => setTab('due')} />
-          <Tab
-            label={`Upcoming (${upcoming.length})`}
-            active={tab === 'upcoming'}
-            onClick={() => setTab('upcoming')}
-          />
+          <Tab label={`Due Now (${due.length})`} active={tab === 'due'} onClick={() => setTab('due')} />
+          <Tab label={`Upcoming (${upcoming.length})`} active={tab === 'upcoming'} onClick={() => setTab('upcoming')} />
           <Tab label={`All (${items.length})`} active={tab === 'all'} onClick={() => setTab('all')} />
-          <Tab
-            label={`Completed (${completed.length})`}
-            active={tab === 'completed'}
-            onClick={() => setTab('completed')}
-          />
+          <Tab label={`Completed (${completed.length})`} active={tab === 'completed'} onClick={() => setTab('completed')} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT: form */}
+          {/* FORM */}
           <div className="lg:col-span-5">
             <div className="glass rounded-2xl border border-white/10 p-6">
               <div className="text-sm font-semibold mb-4">Submit a Follow Up</div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Field label="Full Name">
-                  <input
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className={inputCls}
-                    placeholder="John Doe"
-                  />
+                  <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} placeholder="John Doe" />
                 </Field>
 
                 <Field label="Phone">
@@ -390,38 +325,7 @@ export default function FollowUpsPage() {
                   <select value={company} onChange={(e) => setCompany(e.target.value as any)} className={inputCls}>
                     <option value="">Select…</option>
                     {COMPANIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field label="Beneficiary Name">
-                  <input
-                    value={beneficiaryName}
-                    onChange={(e) => setBeneficiaryName(e.target.value)}
-                    className={inputCls}
-                    placeholder="Jane Doe"
-                  />
-                </Field>
-
-                <Field label="Beneficiary DOB">
-                  <input
-                    value={beneficiaryDob}
-                    onChange={(e) => setBeneficiaryDob(e.target.value)}
-                    className={inputCls}
-                    type="date"
-                  />
-                </Field>
-
-                <Field label="Relationship">
-                  <select value={relationship} onChange={(e) => setRelationship(e.target.value as any)} className={inputCls}>
-                    <option value="">Select…</option>
-                    {RELATIONSHIPS.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
+                      <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
                 </Field>
@@ -436,52 +340,20 @@ export default function FollowUpsPage() {
                   />
                 </Field>
 
-                <Field label="Premium">
-                  <input
-                    value={premium}
-                    onChange={(e) => setPremium(formatMoneyLive(e.target.value))}
-                    className={inputCls}
-                    placeholder="100.00"
-                    inputMode="decimal"
-                  />
-                </Field>
-
                 <Field label="Follow Up Date/Time">
-                  <input
-                    value={followUpAt}
-                    onChange={(e) => setFollowUpAt(e.target.value)}
-                    className={inputCls}
-                    type="datetime-local"
-                  />
+                  <CalendarInput value={followUpAt} onChange={setFollowUpAt} />
                 </Field>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <button className={chipCls} onClick={() => quickSet(24)} type="button">
-                  24hrs
-                </button>
-                <button className={chipCls} onClick={() => quickSet(48)} type="button">
-                  48hrs
-                </button>
-                <button className={chipCls} onClick={() => nextWeek()} type="button">
-                  Next Week
-                </button>
-                <button
-                  className={chipCls}
-                  onClick={() => setFollowUpAt(toDatetimeLocal(new Date()))}
-                  type="button"
-                >
-                  Now
-                </button>
+                <PresetBtn label="24hrs" active={preset === '24'} onClick={() => setPresetTime('24')} />
+                <PresetBtn label="48hrs" active={preset === '48'} onClick={() => setPresetTime('48')} />
+                <PresetBtn label="Next Week" active={preset === 'week'} onClick={() => setPresetTime('week')} />
+                <PresetBtn label="Custom" active={preset === 'custom'} onClick={() => setPresetTime('custom')} />
               </div>
 
               <Field label="Notes" className="mt-4">
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className={`${inputCls} min-h-[110px]`}
-                  placeholder="Key details, underwriting, next steps…"
-                />
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className={`${inputCls} min-h-[110px]`} placeholder="Short notes…" />
               </Field>
 
               <button
@@ -494,7 +366,7 @@ export default function FollowUpsPage() {
             </div>
           </div>
 
-          {/* RIGHT: list */}
+          {/* LIST */}
           <div className="lg:col-span-7">
             <div className="glass rounded-2xl border border-white/10 overflow-hidden">
               <div className="px-6 py-4 bg-white/5 text-sm font-semibold">
@@ -502,50 +374,78 @@ export default function FollowUpsPage() {
               </div>
 
               {loading && <div className="px-6 py-10 text-center text-white/60">Loading…</div>}
-
-              {!loading && view.length === 0 && (
-                <div className="px-6 py-10 text-center text-white/60">No follow ups.</div>
-              )}
+              {!loading && view.length === 0 && <div className="px-6 py-10 text-center text-white/60">No follow ups.</div>}
 
               {!loading &&
-                view.map((fu) => (
-                  <div key={fu.id} className="px-6 py-5 border-t border-white/10 hover:bg-white/5 transition">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="font-semibold truncate">{fu.full_name}</div>
-                          <Pill status={fu.status} followAt={fu.follow_up_at} />
+                view.map((fu) => {
+                  const isDue = fu.status === 'open' && new Date(fu.follow_up_at).getTime() <= Date.now()
+                  const rescheduling = activeRescheduleId === fu.id
+
+                  return (
+                    <div key={fu.id} className="px-6 py-5 border-t border-white/10 hover:bg-white/5 transition">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="font-semibold truncate">{fu.full_name}</div>
+                            <Pill status={fu.status} due={isDue} />
+                          </div>
+
+                          <div className="mt-1 text-xs text-white/60 flex flex-wrap gap-x-4 gap-y-1">
+                            <span>{fu.phone ? fu.phone : '—'}</span>
+                            <span>{fu.company ? fu.company : '—'}</span>
+                            <span>{fu.coverage != null ? `$${money(fu.coverage)}` : '—'}</span>
+                            <span>{formatWhen(fu.follow_up_at)}</span>
+                          </div>
+
+                          {fu.notes && <div className="mt-3 text-sm text-white/80">{fu.notes}</div>}
+
+                          {/* DUE NOW ACTIONS */}
+                          {tab === 'due' && fu.status === 'open' && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <ActionBtn tone="green" active={false} onClick={() => closeDeal(fu)}>
+                                Closed Deal
+                              </ActionBtn>
+                              <ActionBtn tone="yellow" active={rescheduling} onClick={() => toggleReschedule(fu)}>
+                                Follow up
+                              </ActionBtn>
+                              <ActionBtn tone="red" active={false} onClick={() => deniedCoverage(fu.id)}>
+                                Denied Coverage
+                              </ActionBtn>
+                            </div>
+                          )}
+
+                          {/* RESCHEDULE PANEL */}
+                          {rescheduling && (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                              <div className="text-xs text-white/60 mb-3">Reschedule follow up</div>
+
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                <PresetBtn label="24hrs" active={rowPreset[fu.id] === '24'} onClick={() => setRowPresetTime(fu.id, '24')} />
+                                <PresetBtn label="48hrs" active={rowPreset[fu.id] === '48'} onClick={() => setRowPresetTime(fu.id, '48')} />
+                                <PresetBtn label="Next Week" active={rowPreset[fu.id] === 'week'} onClick={() => setRowPresetTime(fu.id, 'week')} />
+                                <PresetBtn label="Custom" active={rowPreset[fu.id] === 'custom'} onClick={() => setRowPresetTime(fu.id, 'custom')} />
+                              </div>
+
+                              <CalendarInput
+                                value={rowFollowAt[fu.id] || ''}
+                                onChange={(v) => setRowFollowAt((s) => ({ ...s, [fu.id]: v }))}
+                              />
+
+                              <div className="mt-3 flex gap-2">
+                                <button className={btnSoft} onClick={() => setActiveRescheduleId(null)}>Cancel</button>
+                                <button className={btnPrimary} onClick={() => saveReschedule(fu.id)}>Save</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        <div className="mt-1 text-xs text-white/60 flex flex-wrap gap-x-4 gap-y-1">
-                          <span>{fu.phone ? fu.phone : '—'}</span>
-                          <span>{fu.company ? fu.company : '—'}</span>
-                          <span>{fu.premium != null ? `$${money(fu.premium)}` : '—'}</span>
-                          <span>{formatWhen(fu.follow_up_at)}</span>
+                        <div className="flex flex-col gap-2 shrink-0">
+                          <button className={btnDanger} onClick={() => deleteFollowUp(fu.id)}>Delete</button>
                         </div>
-
-                        {fu.notes && <div className="mt-3 text-sm text-white/80">{fu.notes}</div>}
-                      </div>
-
-                      <div className="flex flex-col gap-2 shrink-0">
-                        {fu.status === 'open' && (
-                          <>
-                            <button className={btnCls} onClick={() => markSold(fu)}>
-                              Mark Sold
-                            </button>
-                            <button className={btnCls} onClick={() => markDone(fu.id)}>
-                              Done
-                            </button>
-                          </>
-                        )}
-
-                        <button className={btnDangerCls} onClick={() => deleteFollowUp(fu.id)}>
-                          Delete
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
             </div>
           </div>
         </div>
@@ -554,7 +454,7 @@ export default function FollowUpsPage() {
   )
 }
 
-/* ---------------- UI helpers ---------------- */
+/* UI */
 
 function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -570,15 +470,7 @@ function Tab({ label, active, onClick }: { label: string; active: boolean; onCli
   )
 }
 
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string
-  children: React.ReactNode
-  className?: string
-}) {
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={className || ''}>
       <div className="text-[11px] text-white/55 mb-2">{label}</div>
@@ -587,11 +479,54 @@ function Field({
   )
 }
 
-function Pill({ status, followAt }: { status: string; followAt: string }) {
-  const now = Date.now()
-  const t = new Date(followAt).getTime()
-  const due = status === 'open' && t <= now
+function PresetBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'rounded-2xl border px-3 py-2 text-xs transition',
+        active ? 'border-green-400/30 bg-green-500/15 text-green-100' : 'border-white/10 bg-white/5 hover:bg-white/10',
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  )
+}
 
+function ActionBtn({
+  children,
+  onClick,
+  tone,
+  active,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  tone: 'green' | 'yellow' | 'red'
+  active: boolean
+}) {
+  const base =
+    tone === 'green'
+      ? 'border-green-400/25 bg-green-500/15 hover:bg-green-500/20 text-green-100'
+      : tone === 'yellow'
+      ? 'border-yellow-400/25 bg-yellow-500/15 hover:bg-yellow-500/20 text-yellow-100'
+      : 'border-red-400/25 bg-red-500/15 hover:bg-red-500/20 text-red-100'
+
+  const activeRing =
+    tone === 'yellow' && active ? ' ring-2 ring-yellow-300/30' : ''
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border px-3 py-2 text-xs transition ${base}${activeRing}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Pill({ status, due }: { status: string; due: boolean }) {
   const cls =
     status === 'converted'
       ? 'bg-green-500/10 border-green-400/20 text-green-200'
@@ -601,29 +536,43 @@ function Pill({ status, followAt }: { status: string; followAt: string }) {
       ? 'bg-red-500/10 border-red-400/20 text-red-200'
       : 'bg-yellow-500/10 border-yellow-400/20 text-yellow-200'
 
-  const text =
-    status === 'converted' ? 'Converted' : status === 'done' ? 'Done' : due ? 'Due' : 'Upcoming'
-
+  const text = status === 'converted' ? 'Converted' : status === 'done' ? 'Done' : due ? 'Due' : 'Upcoming'
   return <span className={`text-[11px] px-2 py-1 rounded-xl border ${cls}`}>{text}</span>
 }
+
+function CalendarInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative">
+      <input value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} type="datetime-local" />
+      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 opacity-70">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M7 3v2M17 3v2M4 9h16M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+            stroke="rgba(255,255,255,0.65)"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+/* styles */
 
 const inputCls =
   'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
-const chipCls =
-  'rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10 transition'
+const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
+const btnSoft = 'flex-1 rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnPrimary = 'flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 transition px-3 py-2 text-xs font-semibold'
+const btnDanger = 'rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs hover:bg-red-500/15 transition'
 
-const btnCls =
-  'rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10 transition'
-
-const btnDangerCls =
-  'rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs hover:bg-red-500/15 transition'
-
-/* ---------------- formatting ---------------- */
+/* formatting */
 
 function cleanPhone(v: string) {
   const d = (v || '').replace(/\D/g, '').slice(0, 10)
-  if (d.length < 10) return v || null
+  if (d.length < 10) return null
   return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
 }
 
@@ -632,7 +581,6 @@ function formatPhoneLive(v: string) {
   const a = d.slice(0, 3)
   const b = d.slice(3, 6)
   const c = d.slice(6, 10)
-
   if (d.length <= 3) return a ? `(${a}` : ''
   if (d.length <= 6) return `(${a}) ${b}`
   return `(${a}) ${b}-${c}`
@@ -657,16 +605,10 @@ function money(n: number) {
 }
 
 function formatWhen(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleString()
+  return new Date(iso).toLocaleString()
 }
 
 function toDatetimeLocal(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')
-  const yyyy = d.getFullYear()
-  const mm = pad(d.getMonth() + 1)
-  const dd = pad(d.getDate())
-  const hh = pad(d.getHours())
-  const mi = pad(d.getMinutes())
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
