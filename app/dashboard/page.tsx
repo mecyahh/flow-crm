@@ -3,6 +3,7 @@
 import Sidebar from '../components/Sidebar'
 import FlowLineChart from '../components/FlowLineChart'
 import CarrierDonut from '../components/CarrierDonut'
+import GoalDonuts from '../components/GoalDonuts'
 
 export default function DashboardPage() {
   return (
@@ -51,6 +52,12 @@ export default function DashboardPage() {
                 <FlowLineChart />
               </div>
 
+              {/* GOALS */}
+              <div className="mt-6">
+                <GoalDonuts />
+              </div>
+
+              {/* DEALS KPI MOVED HERE */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 <KPI title="Today" value="0" sub="Deals submitted" />
                 <KPI title="This Week" value="0" sub="Deals submitted" />
