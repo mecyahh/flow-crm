@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -22,9 +22,53 @@ type Agent = {
 export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<Row[]>([])
+  const [toast, setToast] = useState<string | null>(null)
+
+  const chimeRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
     load()
+  }, [])
+
+  // Poll + announce when #1 changes
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const { data, error } = await supabase
+        .from('deals')
+        .select('agent_id, full_name, premium')
+        .order('created_at', { ascending: false })
+        .limit(5000)
+
+      if (error || !data) return
+
+      const top = computeAgents(data as any[])[0]
+      if (!top?.agent_id) return
+
+      const key = 'flow_leader_top1'
+      const prev = localStorage.getItem(key)
+
+      // initialize silently once
+      if (!prev) {
+        localStorage.setItem(key, top.agent_id)
+        return
+      }
+
+      if (prev !== top.agent_id) {
+        localStorage.setItem(key, top.agent_id)
+
+        const msg = `🏆 New #1: ${top.name}`
+        setToast(msg)
+        playChime()
+        notify(msg)
+
+        // refresh list in UI
+        setRows((prevRows) => prevRows) // no-op, then reload
+        await load()
+      }
+    }, 20000)
+
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function load() {
@@ -39,26 +83,29 @@ export default function LeaderboardPage() {
     setLoading(false)
   }
 
-  const agents = useMemo(() => {
-    const map = new Map<string, Agent>()
-    for (const r of rows) {
-      const id = r.agent_id
-      if (!id) continue
-      if (!map.has(id)) {
-        map.set(id, {
-          agent_id: id,
-          name: (r.full_name || 'Agent').trim(),
-          deals: 0,
-          premium: 0,
-        })
-      }
-      const a = map.get(id)!
-      a.deals += 1
-      a.premium += Number(r.premium || 0)
-    }
-    return Array.from(map.values()).sort((a, b) => b.premium - a.premium)
-  }, [rows])
+  function playChime() {
+    try {
+      if (!chimeRef.current) chimeRef.current = new Audio('/chime.mp3')
+      chimeRef.current.currentTime = 0
+      chimeRef.current.play().catch(() => {})
+    } catch {}
+  }
 
+  async function enableNotifications() {
+    if (!('Notification' in window)) return
+    if (Notification.permission === 'granted') return
+    await Notification.requestPermission()
+  }
+
+  function notify(message: string) {
+    try {
+      if (!('Notification' in window)) return
+      if (Notification.permission !== 'granted') return
+      new Notification('Flow Leaderboard', { body: message })
+    } catch {}
+  }
+
+  const agents = useMemo(() => computeAgents(rows), [rows])
   const top1 = agents[0]
   const top2 = agents[1]
   const top3 = agents[2]
@@ -68,19 +115,60 @@ export default function LeaderboardPage() {
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
 
+      {/* Toast banner */}
+      {toast && (
+        <div className="fixed top-5 right-5 z-50">
+          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+            <div className="text-sm font-semibold">{toast}</div>
+            <div className="text-xs text-white/60 mt-1">
+              Leaderboard updated live.
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button
+                className="flex-1 rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs"
+                onClick={() => setToast(null)}
+              >
+                Dismiss
+              </button>
+              <button
+                className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 transition px-3 py-2 text-xs font-semibold"
+                onClick={() => {
+                  setToast(null)
+                  window.location.reload()
+                }}
+              >
+                View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="ml-64 px-10 py-10">
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
-            <p className="text-sm text-white/60 mt-1">Top producers — updated live.</p>
+            <p className="text-sm text-white/60 mt-1">
+              Top producers — updated live.
+            </p>
           </div>
 
-          <button
-            onClick={() => window.location.reload()}
-            className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={enableNotifications}
+              className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition"
+              title="Enable browser notifications for #1 changes"
+            >
+              Enable Alerts
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Top 3 podium */}
@@ -155,6 +243,26 @@ export default function LeaderboardPage() {
   )
 }
 
+function computeAgents(rows: Array<any>) {
+  const map = new Map<string, Agent>()
+  for (const r of rows) {
+    const id = r.agent_id
+    if (!id) continue
+    if (!map.has(id)) {
+      map.set(id, {
+        agent_id: id,
+        name: (r.full_name || 'Agent').trim(),
+        deals: 0,
+        premium: 0,
+      })
+    }
+    const a = map.get(id)!
+    a.deals += 1
+    a.premium += Number(r.premium || 0)
+  }
+  return Array.from(map.values()).sort((a, b) => b.premium - a.premium)
+}
+
 function PodiumCard({
   rank,
   label,
@@ -195,14 +303,7 @@ function PodiumCard({
         height,
       ].join(' ')}
     >
-      {/* glow */}
-      <div
-        className={[
-          'pointer-events-none absolute inset-0 bg-gradient-to-br',
-          accentStyles,
-        ].join(' ')}
-      />
-      {/* subtle shine line */}
+      <div className={['pointer-events-none absolute inset-0 bg-gradient-to-br', accentStyles].join(' ')} />
       <div className="pointer-events-none absolute -top-10 left-10 h-40 w-40 rotate-12 rounded-full bg-white/10 blur-2xl" />
 
       <div className="relative p-6">
