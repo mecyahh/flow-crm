@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import FlowDatePicker from '@/app/components/FlowDatePicker'
 import FlowDateTimePicker from '@/app/components/FlowDateTimePicker'
 import NotificationsBell, { pushNotification } from '@/app/components/NotificationsBell'
+import { useRouter } from 'next/navigation'
 
 type FollowUp = {
   id: string
@@ -39,6 +40,8 @@ const QUICK = [
 ] as const
 
 export default function FollowUpsPage() {
+  const router = useRouter()
+
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
   const [rows, setRows] = useState<FollowUp[]>([])
@@ -134,13 +137,17 @@ export default function FollowUpsPage() {
     load()
   }
 
-  async function setOutcome(id: string, outcome: 'closed_deal' | 'follow_up' | 'denied_coverage') {
+  async function setOutcome(id: string, outcome: 'follow_up' | 'denied_coverage') {
     const { error } = await supabase.from('follow_ups').update({ outcome }).eq('id', id)
     if (error) {
       setToast('Update failed')
       return
     }
     setRows((p) => p.map((r) => (r.id === id ? { ...r, outcome } : r)))
+  }
+
+  function goCloseDeal(followUpId: string) {
+    router.push(`/close-deal/${followUpId}`)
   }
 
   return (
@@ -308,7 +315,7 @@ export default function FollowUpsPage() {
                         <td className={tdRight}>
                           <div className="flex justify-end gap-2">
                             <button
-                              onClick={() => setOutcome(r.id, 'closed_deal')}
+                              onClick={() => goCloseDeal(r.id)}
                               className="rounded-2xl border border-white/10 bg-green-600/20 hover:bg-green-600/30 transition px-3 py-2 text-xs font-semibold"
                             >
                               Closed Deal
@@ -396,4 +403,4 @@ const th = 'text-left px-6 py-3 whitespace-nowrap'
 const thRight = 'text-right px-6 py-3 whitespace-nowrap'
 const td = 'px-6 py-4 text-white/80 whitespace-nowrap'
 const tdStrong = 'px-6 py-4 font-semibold whitespace-nowrap'
-const tdRight = 'px-6 py-4 text-right whitespace-nowrap'
+const tdRight = 'text-right px-6 py-4 whitespace-nowrap'
