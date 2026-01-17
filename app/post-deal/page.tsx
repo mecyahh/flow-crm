@@ -1,24 +1,36 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 
-const RELATIONSHIPS = ['Spouse', 'Child', 'Parent', 'Friend', 'Sibling', 'Other'] as const
+const RELATIONSHIPS = ['Spouse', 'Child', 'Parent', 'Friend', 'Sibling', 'Estate', 'Other'] as const
+
+const CARRIERS = [
+  'Aetna',
+  'Aflac',
+  'AIG',
+  'American Amicable',
+  'Mutual Of Omaha',
+  'Royal Neighbors',
+  'Transamerica',
+] as const
 
 export default function PostDealPage() {
   const [loading, setLoading] = useState(false)
   const [ready, setReady] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
+  const [policyNumber, setPolicyNumber] = useState('')
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [dob, setDob] = useState('')
   const [beneficiary, setBeneficiary] = useState('')
-  const [beneficiaryRelationship, setBeneficiaryRelationship] = useState<(typeof RELATIONSHIPS)[number]>('Spouse')
+  const [beneficiaryRelationship, setBeneficiaryRelationship] =
+    useState<(typeof RELATIONSHIPS)[number]>('Spouse')
   const [coverage, setCoverage] = useState('')
   const [premium, setPremium] = useState('')
-  const [company, setCompany] = useState('')
+  const [company, setCompany] = useState<(typeof CARRIERS)[number]>('Aetna')
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
@@ -32,11 +44,14 @@ export default function PostDealPage() {
     })()
   }, [])
 
+  const premiumNumber = useMemo(() => parseMoneyToNumber(premium), [premium])
+  const coverageNumber = useMemo(() => parseMoneyToNumber(coverage), [coverage])
+
   async function submitDeal() {
     setMsg(null)
 
-    if (!fullName.trim() || !premium.trim() || !company.trim()) {
-      setMsg('Full name, premium, and company are required.')
+    if (!fullName.trim() || !String(company).trim() || premiumNumber <= 0) {
+      setMsg('Full name, company, and premium are required.')
       return
     }
 
@@ -50,19 +65,17 @@ export default function PostDealPage() {
       return
     }
 
-    const premiumNum = Number(premium.replace(/[^0-9.]/g, ''))
-    const coverageNum = Number(coverage.replace(/[^0-9.]/g, ''))
-
     const payload: any = {
       user_id: user.id,
+      policy_number: policyNumber.trim() || null,
       full_name: fullName.trim(),
-      phone: phone.trim() || null,
+      phone: normalizePhone(phone) || null,
       client_dob: dob || null,
       beneficiary: beneficiary.trim() || null,
       beneficiary_relationship: beneficiaryRelationship,
-      coverage: isNaN(coverageNum) ? null : coverageNum,
-      premium: isNaN(premiumNum) ? 0 : premiumNum,
-      company: company.trim(),
+      coverage: coverageNumber > 0 ? coverageNumber : null,
+      premium: premiumNumber,
+      company: String(company).trim(),
       notes: notes.trim() || null,
       status: 'Submitted',
     }
@@ -77,6 +90,11 @@ export default function PostDealPage() {
     }
 
     setMsg('Deal submitted ✅')
+    clearForm()
+  }
+
+  function clearForm() {
+    setPolicyNumber('')
     setFullName('')
     setPhone('')
     setDob('')
@@ -84,7 +102,7 @@ export default function PostDealPage() {
     setBeneficiaryRelationship('Spouse')
     setCoverage('')
     setPremium('')
-    setCompany('')
+    setCompany('Aetna')
     setNotes('')
   }
 
@@ -117,31 +135,55 @@ export default function PostDealPage() {
           </button>
         </div>
 
-        {/* Glass modal */}
         <div className="glass p-7 max-w-3xl">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Policy Number">
+              <Input value={policyNumber} onChange={setPolicyNumber} placeholder="Policy #" />
+            </Field>
+
+            <Field label="Company *">
+              <Select
+                value={company}
+                onChange={(v) => setCompany(v as any)}
+                options={CARRIERS as any}
+              />
+            </Field>
+
             <Field label="Full Name *">
               <Input value={fullName} onChange={setFullName} placeholder="John Doe" />
             </Field>
 
             <Field label="Phone">
-              <Input value={phone} onChange={setPhone} placeholder="(555) 555-5555" />
+              <Input
+                value={phone}
+                onChange={(v) => setPhone(formatPhoneLive(v))}
+                placeholder="(888)888-8888"
+                inputMode="tel"
+              />
             </Field>
 
             <Field label="Client DOB">
               <Input type="date" value={dob} onChange={setDob} />
             </Field>
 
-            <Field label="Company *">
-              <Input value={company} onChange={setCompany} placeholder="AIG / Mutual / Foresters" />
-            </Field>
-
             <Field label="Premium (monthly) *">
-              <Input value={premium} onChange={setPremium} placeholder="100" />
+              <Input
+                value={premium}
+                onChange={setPremium}
+                onBlurFormat="money"
+                placeholder="1,000.00"
+                inputMode="decimal"
+              />
             </Field>
 
             <Field label="Coverage">
-              <Input value={coverage} onChange={setCoverage} placeholder="250000" />
+              <Input
+                value={coverage}
+                onChange={setCoverage}
+                onBlurFormat="money"
+                placeholder="250,000.00"
+                inputMode="decimal"
+              />
             </Field>
 
             <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -175,15 +217,7 @@ export default function PostDealPage() {
             <button
               onClick={() => {
                 setMsg(null)
-                setFullName('')
-                setPhone('')
-                setDob('')
-                setBeneficiary('')
-                setBeneficiaryRelationship('Spouse')
-                setCoverage('')
-                setPremium('')
-                setCompany('')
-                setNotes('')
+                clearForm()
               }}
               className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition"
               disabled={loading}
@@ -198,6 +232,10 @@ export default function PostDealPage() {
             >
               {loading ? 'Submitting…' : 'Submit Deal'}
             </button>
+          </div>
+
+          <div className="mt-4 text-xs text-white/40">
+            Phone auto-formats. Premium/Coverage auto-format on blur.
           </div>
         </div>
       </div>
@@ -221,18 +259,28 @@ function Input({
   onChange,
   placeholder,
   type = 'text',
+  inputMode,
+  onBlurFormat,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   type?: string
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  onBlurFormat?: 'money'
 }) {
   return (
     <input
       type={type}
       value={value}
       placeholder={placeholder}
+      inputMode={inputMode}
       onChange={(e) => onChange(e.target.value)}
+      onBlur={() => {
+        if (onBlurFormat === 'money') {
+          onChange(formatMoneyLive(value))
+        }
+      }}
       className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-blue-500/60"
     />
   )
@@ -280,4 +328,38 @@ function Select({
       ))}
     </select>
   )
+}
+
+/* formatting helpers */
+
+function digitsOnly(s: string) {
+  return (s || '').replace(/\D/g, '')
+}
+
+function formatPhoneLive(input: string) {
+  const d = digitsOnly(input).slice(0, 10)
+  const a = d.slice(0, 3)
+  const b = d.slice(3, 6)
+  const c = d.slice(6, 10)
+  if (d.length <= 3) return a ? `(${a}` : ''
+  if (d.length <= 6) return `(${a})${b}`
+  return `(${a})${b}-${c}`
+}
+
+function normalizePhone(input: string) {
+  const d = digitsOnly(input)
+  if (d.length !== 10) return ''
+  return `(${d.slice(0, 3)})${d.slice(3, 6)}-${d.slice(6, 10)}`
+}
+
+function parseMoneyToNumber(input: string) {
+  const cleaned = (input || '').replace(/[^0-9.]/g, '')
+  const n = Number(cleaned)
+  return isNaN(n) ? 0 : n
+}
+
+function formatMoneyLive(input: string) {
+  const n = parseMoneyToNumber(input)
+  if (!isFinite(n)) return ''
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
