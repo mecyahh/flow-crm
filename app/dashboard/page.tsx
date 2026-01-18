@@ -4,17 +4,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Sidebar from '../components/Sidebar'
+import FlowLineChart from '../components/FlowLineChart'
+import CarrierDonut from '../components/CarrierDonut'
+import GoalDonuts from '../components/GoalDonuts'
 import { supabase } from '@/lib/supabaseClient'
 import FlowDatePicker from '@/app/components/FlowDatePicker'
 
 type DealRow = {
   id: string
+  user_id: string
   created_at: string
-  agent_id: string | null
-  full_name: string | null
+  premium: any
   company: string | null
-  premium: number | null
-  coverage: number | null
 }
 
 type ProfileRow = {
@@ -24,504 +25,551 @@ type ProfileRow = {
   email: string | null
 }
 
-type LeaderRow = {
-  id: string
-  name: string
-  premium: number
-}
-
-const fmtMoney = (n: number) =>
-  n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-function isoToPretty(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, { month: 'short', day: '2-digit', year: 'numeric' })
-}
-
-function isoDateOnly(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function startOfDayISO(dateISO: string) {
-  const [y, m, d] = dateISO.split('-').map((x) => Number(x))
-  const dt = new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0)
-  return dt.toISOString()
-}
-
-function endOfDayISO(dateISO: string) {
-  const [y, m, d] = dateISO.split('-').map((x) => Number(x))
-  const dt = new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999)
-  return dt.toISOString()
-}
-
-function startOfWeekISO(now: Date) {
-  const d = new Date(now)
-  const day = (d.getDay() + 6) % 7 // Mon=0
-  d.setDate(d.getDate() - day)
-  d.setHours(0, 0, 0, 0)
-  return d.toISOString()
-}
-
-function startOfMonthISO(now: Date) {
-  const d = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
-  return d.toISOString()
-}
-
-function hourLabel(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
-
-function TopCarrierDonut({
-  label,
-  value,
-}: {
-  label: string
-  value: number // 0..1
-}) {
-  const pct = Math.max(0, Math.min(1, value))
-  const deg = Math.round(pct * 360)
-  return (
-    <div className="flex items-center gap-4">
-      <div
-        className="h-16 w-16 rounded-full border border-white/10"
-        style={{
-          background: `conic-gradient(rgba(59,130,246,0.9) ${deg}deg, rgba(255,255,255,0.10) 0deg)`,
-        }}
-      />
-      <div>
-        <div className="text-xs text-white/60">Deals Submitted</div>
-        <div className="text-lg font-semibold">{label}</div>
-        <div className="text-xs text-white/55 mt-1">{Math.round(pct * 100)}%</div>
-      </div>
-    </div>
-  )
-}
-
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
-  const [toast, setToast] = useState<string | null>(null)
+  const [deals, setDeals] = useState<DealRow[]>([])
+  const [meName, setMeName] = useState<string>('Agent')
 
-  const [meName, setMeName] = useState<string>('')
-
-  // date picker for the 3 top cards (production)
+  // NEW: top cards date picker (glass)
   const [dayPick, setDayPick] = useState<string>(() => {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const d = String(now.getDate()).padStart(2, '0')
+    const n = new Date()
+    const y = n.getFullYear()
+    const m = String(n.getMonth() + 1).padStart(2, '0')
+    const d = String(n.getDate()).padStart(2, '0')
     return `${y}-${m}-${d}`
   })
 
-  // metrics
-  const [todayProd, setTodayProd] = useState(0)
-  const [weekProd, setWeekProd] = useState(0)
-  const [monthProd, setMonthProd] = useState(0)
+  useEffect(() => {
+    let alive = true
 
-  const [writingAgents, setWritingAgents] = useState(0)
+    ;(async () => {
+      setLoading(true)
 
-  // right side leaderboard (top 5)
-  const [leaders, setLeaders] = useState<LeaderRow[]>([])
+      const { data: userRes } = await supabase.auth.getUser()
+      const user = userRes.user
+      if (!user) {
+        window.location.href = '/login'
+        return
+      }
 
-  // right side donut: top company by deals count
-  const [topCompany, setTopCompany] = useState<{ name: string; share: number } | null>(null)
+      // NEW: Welcome Back {username}
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('id,first_name,last_name,email')
+        .eq('id', user.id)
+        .single()
 
-  // recent activity
-  const [recent, setRecent] = useState<
-    { id: string; agent: string; premium: number; time: string }[]
+      const nm =
+        `${(prof?.first_name || '').trim()} ${(prof?.last_name || '').trim()}`.trim() ||
+        (prof?.email || '').trim() ||
+        'Agent'
+
+      const { data, error } = await supabase
+        .from('deals')
+        .select('id,user_id,created_at,premium,company')
+        .order('created_at', { ascending: false })
+        .limit(2500)
+
+      if (!alive) return
+
+      setMeName(nm)
+
+      if (error) {
+        setDeals([])
+        setLoading(false)
+        return
+      }
+
+      setDeals((data as DealRow[]) || [])
+      setLoading(false)
+    })()
+
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const now = new Date()
+
+  const parsed = useMemo(() => {
+    return deals.map((d) => {
+      const dt = d.created_at ? new Date(d.created_at) : new Date()
+      const premiumNum =
+        typeof d.premium === 'number'
+          ? d.premium
+          : typeof d.premium === 'string'
+          ? Number(d.premium.replace(/[^0-9.]/g, ''))
+          : Number(d.premium || 0)
+
+      return {
+        ...d,
+        dt,
+        premiumNum: isNaN(premiumNum) ? 0 : premiumNum,
+        companySafe: (d.company || 'Other').trim() || 'Other',
+      }
+    })
+  }, [deals])
+
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const startOfWeek = (d: Date) => {
+    const day = d.getDay()
+    const diff = day === 0 ? -6 : 1 - day
+    const base = new Date(d)
+    base.setDate(d.getDate() + diff)
+    return startOfDay(base)
+  }
+  const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1)
+
+  const todayStart = startOfDay(now)
+  const weekStart = startOfWeek(now)
+  const monthStart = startOfMonth(now)
+
+  // NEW: chosen day start/end
+  const pickStart = useMemo(() => {
+    const [y, m, d] = dayPick.split('-').map((x) => Number(x))
+    return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0)
+  }, [dayPick])
+
+  const pickEnd = useMemo(() => {
+    const e = new Date(pickStart)
+    e.setDate(e.getDate() + 1)
+    return e
+  }, [pickStart])
+
+  // FILTERS
+  const todayDeals = useMemo(() => parsed.filter((d) => d.dt >= todayStart), [parsed, todayStart])
+  const weekDeals = useMemo(() => parsed.filter((d) => d.dt >= weekStart), [parsed, weekStart])
+  const monthDeals = useMemo(() => parsed.filter((d) => d.dt >= monthStart), [parsed, monthStart])
+
+  // NEW: “Team Total” should show Production (for selected day)
+  const dayDealsPicked = useMemo(
+    () => parsed.filter((d) => d.dt >= pickStart && d.dt < pickEnd),
+    [parsed, pickStart, pickEnd]
+  )
+
+  const dayProduction = useMemo(
+    () => dayDealsPicked.reduce((s, d) => s + d.premiumNum, 0),
+    [dayDealsPicked]
+  )
+
+  // NEW: deals submitted (for selected day) to replace Top Carrier card
+  const dayDealsCount = useMemo(() => dayDealsPicked.length, [dayDealsPicked])
+
+  // NEW: writing agents should be for selected day
+  const writingAgents = useMemo(() => {
+    const uniq = new Set(dayDealsPicked.map((d) => d.user_id))
+    return uniq.size
+  }, [dayDealsPicked])
+
+  // KEEP: Flow Trend top carrier logic (month) BUT label changes handled in UI
+  const topCarrier = useMemo(() => {
+    const map = new Map<string, number>()
+    monthDeals.forEach((d) => map.set(d.companySafe, (map.get(d.companySafe) || 0) + 1))
+    let best = '—'
+    let bestCount = 0
+    for (const [k, v] of map.entries()) {
+      if (v > bestCount) {
+        best = k
+        bestCount = v
+      }
+    }
+    return bestCount === 0 ? '—' : best
+  }, [monthDeals])
+
+  const last7 = useMemo(() => {
+    const days: { label: string; count: number }[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(now.getDate() - i)
+      const dStart = startOfDay(d)
+      const next = new Date(dStart)
+      next.setDate(dStart.getDate() + 1)
+
+      const count = parsed.filter((x) => x.dt >= dStart && x.dt < next).length
+      const label = d.toLocaleDateString(undefined, { weekday: 'short' })
+      days.push({ label, count })
+    }
+    return days
+  }, [parsed])
+
+  const lineLabels = useMemo(() => last7.map((x) => x.label), [last7])
+  const lineValues = useMemo(() => last7.map((x) => x.count), [last7])
+
+  const carrierDist = useMemo(() => {
+    const map = new Map<string, number>()
+    monthDeals.forEach((d) => map.set(d.companySafe, (map.get(d.companySafe) || 0) + 1))
+    const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    const labels = entries.length ? entries.map((e) => e[0]) : ['No Data']
+    const values = entries.length ? entries.map((e) => e[1]) : [100]
+    return { labels, values }
+  }, [monthDeals])
+
+  // NEW: production totals for KPI cards (today/week/month) but show premium totals
+  const todaysProduction = useMemo(
+    () => todayDeals.reduce((s, d) => s + d.premiumNum, 0),
+    [todayDeals]
+  )
+  const weeksProduction = useMemo(
+    () => weekDeals.reduce((s, d) => s + d.premiumNum, 0),
+    [weekDeals]
+  )
+  const monthsProduction = useMemo(
+    () => monthDeals.reduce((s, d) => s + d.premiumNum, 0),
+    [monthDeals]
+  )
+
+  // NEW: leaderboard top 5 (real) + always show me on top above them
+  const [leaderRows, setLeaderRows] = useState<
+    { user_id: string; name: string; premium: number }[]
   >([])
 
   useEffect(() => {
     let alive = true
-    async function boot() {
-      try {
-        setLoading(true)
+    ;(async () => {
+      const { data: userRes } = await supabase.auth.getUser()
+      const user = userRes.user
+      if (!user) return
 
-        // auth
-        const { data: userRes, error: userErr } = await supabase.auth.getUser()
-        if (userErr) throw new Error(`auth.getUser: ${userErr.message}`)
-        const uid = userRes.user?.id
-        if (!uid) throw new Error('Not logged in. Go to /login first.')
+      const map = new Map<string, number>()
+      monthDeals.forEach((d) => {
+        map.set(d.user_id, (map.get(d.user_id) || 0) + d.premiumNum)
+      })
 
-        // profile for welcome back + name
-        const { data: prof } = await supabase
+      const ids = Array.from(map.keys())
+      let profs: ProfileRow[] = []
+      if (ids.length) {
+        const { data } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, email')
-          .eq('id', uid)
-          .single()
-
-        const name =
-          `${(prof?.first_name || '').trim()} ${(prof?.last_name || '').trim()}`.trim() ||
-          (prof?.email || '').trim() ||
-          'Agent'
-
-        if (!alive) return
-        setMeName(name)
-
-        // build time windows
-        const now = new Date()
-        const dayStart = startOfDayISO(dayPick)
-        const dayEnd = endOfDayISO(dayPick)
-        const weekStart = startOfWeekISO(now)
-        const monthStart = startOfMonthISO(now)
-
-        // 1) Production totals (today/week/month)
-        // Today = filtered by selected dayPick
-        const [{ data: dayDeals, error: dayErr }, { data: weekDeals, error: weekErr }, { data: monthDeals, error: monthErr }] =
-          await Promise.all([
-            supabase
-              .from('deals')
-              .select('premium, agent_id')
-              .gte('created_at', dayStart)
-              .lte('created_at', dayEnd),
-            supabase.from('deals').select('premium, agent_id').gte('created_at', weekStart),
-            supabase.from('deals').select('premium, agent_id').gte('created_at', monthStart),
-          ])
-
-        if (dayErr) throw new Error(dayErr.message)
-        if (weekErr) throw new Error(weekErr.message)
-        if (monthErr) throw new Error(monthErr.message)
-
-        const sumPremium = (rows: any[] | null | undefined) =>
-          (rows || []).reduce((acc, r) => acc + (Number(r.premium) || 0), 0)
-
-        const distinctAgents = (rows: any[] | null | undefined) => {
-          const s = new Set<string>()
-          ;(rows || []).forEach((r) => {
-            if (r.agent_id) s.add(String(r.agent_id))
-          })
-          return s.size
-        }
-
-        const daySum = sumPremium(dayDeals as any[])
-        const weekSum = sumPremium(weekDeals as any[])
-        const monthSum = sumPremium(monthDeals as any[])
-
-        const wa = distinctAgents(dayDeals as any[]) // writing agents = agents who wrote on selected day
-
-        if (!alive) return
-        setTodayProd(daySum)
-        setWeekProd(weekSum)
-        setMonthProd(monthSum)
-        setWritingAgents(wa)
-
-        // 2) Top company by deal count (this month)
-        const { data: monthForCompany, error: compErr } = await supabase
-          .from('deals')
-          .select('company')
-          .gte('created_at', monthStart)
-          .limit(5000)
-
-        if (compErr) throw new Error(compErr.message)
-
-        const companyCounts = new Map<string, number>()
-        ;(monthForCompany as DealRow[] | null | undefined)?.forEach((r: any) => {
-          const c = (r.company || 'Unknown').toString().trim() || 'Unknown'
-          companyCounts.set(c, (companyCounts.get(c) || 0) + 1)
-        })
-
-        let topName = 'No Data'
-        let topCount = 0
-        let totalCount = 0
-        for (const [, v] of companyCounts) totalCount += v
-        for (const [k, v] of companyCounts) {
-          if (v > topCount) {
-            topCount = v
-            topName = k
-          }
-        }
-
-        if (!alive) return
-        setTopCompany(
-          totalCount > 0 ? { name: topName, share: topCount / totalCount } : { name: 'No Data', share: 0 }
-        )
-
-        // 3) Leaderboard (top 5 by premium, this month)
-        const { data: monthDealsForLeaders, error: ldErr } = await supabase
-          .from('deals')
-          .select('agent_id, premium')
-          .gte('created_at', monthStart)
-          .limit(5000)
-
-        if (ldErr) throw new Error(ldErr.message)
-
-        const totals = new Map<string, number>()
-        const agentIds = new Set<string>()
-        ;(monthDealsForLeaders as any[]).forEach((r) => {
-          const aid = r.agent_id ? String(r.agent_id) : ''
-          if (!aid) return
-          agentIds.add(aid)
-          totals.set(aid, (totals.get(aid) || 0) + (Number(r.premium) || 0))
-        })
-
-        let profiles: ProfileRow[] = []
-        if (agentIds.size > 0) {
-          const { data: profs, error: pErr } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name, email')
-            .in('id', Array.from(agentIds))
-          if (pErr) throw new Error(pErr.message)
-          profiles = (profs || []) as ProfileRow[]
-        }
-
-        const nameById = new Map<string, string>()
-        profiles.forEach((p) => {
-          const nm =
-            `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim() ||
-            (p.email || '').trim() ||
-            'Agent'
-          nameById.set(p.id, nm)
-        })
-
-        const top5: LeaderRow[] = Array.from(totals.entries())
-          .map(([id, premium]) => ({
-            id,
-            name: nameById.get(id) || 'Agent',
-            premium,
-          }))
-          .sort((a, b) => b.premium - a.premium)
-          .slice(0, 5)
-
-        if (!alive) return
-
-        // show logged-in agent first, then real leaderboard below
-        const mePremium = totals.get(uid) || 0
-        const meRow: LeaderRow = { id: uid, name, premium: mePremium }
-        const rest = top5.filter((r) => r.id !== uid)
-        setLeaders([meRow, ...rest].slice(0, 5))
-
-        // 4) Recent activity (last 12 deals, show agent name + premium + hour)
-        const { data: rec, error: recErr } = await supabase
-          .from('deals')
-          .select('id, created_at, agent_id, premium')
-          .order('created_at', { ascending: false })
-          .limit(12)
-
-        if (recErr) throw new Error(recErr.message)
-
-        const recAgentIds = Array.from(
-          new Set((rec || []).map((r: any) => (r.agent_id ? String(r.agent_id) : '')).filter(Boolean))
-        )
-
-        let recProfiles: ProfileRow[] = []
-        if (recAgentIds.length) {
-          const { data: rp, error: rpe } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name, email')
-            .in('id', recAgentIds)
-          if (rpe) throw new Error(rpe.message)
-          recProfiles = (rp || []) as ProfileRow[]
-        }
-
-        const recNameById = new Map<string, string>()
-        recProfiles.forEach((p) => {
-          const nm =
-            `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim() ||
-            (p.email || '').trim() ||
-            'Agent'
-          recNameById.set(p.id, nm)
-        })
-
-        const recRows = (rec || []).map((r: any) => ({
-          id: r.id,
-          agent: recNameById.get(String(r.agent_id || '')) || 'Agent',
-          premium: Number(r.premium) || 0,
-          time: hourLabel(r.created_at),
-        }))
-
-        if (!alive) return
-        setRecent(recRows)
-
-        setLoading(false)
-      } catch (e: any) {
-        if (!alive) return
-        setToast(e?.message || 'Dashboard error')
-        setLoading(false)
+          .select('id,first_name,last_name,email')
+          .in('id', ids)
+        profs = (data || []) as ProfileRow[]
       }
-    }
 
-    boot()
+      const nameById = new Map<string, string>()
+      profs.forEach((p) => {
+        const nm =
+          `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim() ||
+          (p.email || '').trim() ||
+          'Agent'
+        nameById.set(p.id, nm)
+      })
+
+      const sorted = ids
+        .map((id) => ({
+          user_id: id,
+          name: nameById.get(id) || 'Agent',
+          premium: map.get(id) || 0,
+        }))
+        .sort((a, b) => b.premium - a.premium)
+
+      const me = sorted.find((x) => x.user_id === user.id) || {
+        user_id: user.id,
+        name: meName || 'You',
+        premium: map.get(user.id) || 0,
+      }
+
+      const top5 = sorted.slice(0, 5)
+      const rest = top5.filter((x) => x.user_id !== user.id)
+
+      if (!alive) return
+      setLeaderRows([me, ...rest].slice(0, 5))
+    })()
+
     return () => {
       alive = false
     }
-  }, [dayPick])
+  }, [monthDeals, meName])
 
-  const top5Only = useMemo(() => leaders.slice(0, 5), [leaders])
+  const weeklyGoal = 20
+  const monthlyGoal = 90
+
+  // NEW: Recent activity should show agent name + hour
+  const recentRows = useMemo(() => {
+    return (loading ? [] : parsed.slice(0, 6)).map((d) => ({
+      id: d.id,
+      agentId: d.user_id,
+      premium: d.premiumNum,
+      dt: d.dt,
+    }))
+  }, [parsed, loading])
+
+  const [recentNames, setRecentNames] = useState<Map<string, string>>(new Map())
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      const ids = Array.from(new Set(recentRows.map((r) => r.agentId))).filter(Boolean)
+      if (!ids.length) return
+      const { data } = await supabase
+        .from('profiles')
+        .select('id,first_name,last_name,email')
+        .in('id', ids)
+
+      const m = new Map<string, string>()
+      ;((data || []) as ProfileRow[]).forEach((p) => {
+        const nm =
+          `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim() ||
+          (p.email || '').trim() ||
+          'Agent'
+        m.set(p.id, nm)
+      })
+
+      if (!alive) return
+      setRecentNames(m)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [recentRows])
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
 
-      {toast && (
-        <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
-            <div className="text-sm font-semibold">{toast}</div>
-            <div className="mt-3 flex gap-2">
-              <button className={btnSoft} onClick={() => setToast(null)}>
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="ml-64 px-10 py-10">
-        <div className="mb-8 flex items-end justify-between">
+      <div className="ml-64">
+        <header className="px-10 pt-10 pb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-            <p className="text-sm text-white/60 mt-1">Welcome Back {meName || '—'}</p>
+            <p className="text-sm text-white/60 mt-1">Welcome Back {meName}</p>
           </div>
 
           <div className="flex items-center gap-3">
-            <button onClick={() => location.reload()} className={btnGlass}>
-              Refresh
+            <button className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition">
+              Notifications
             </button>
+            <a
+              href="/post-deal"
+              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold transition"
+            >
+              Post a Deal
+            </a>
           </div>
-        </div>
+        </header>
 
-        {/* TOP GRID */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          {/* LEFT: snapshot */}
-          <div className="xl:col-span-2">
-            <div className="glass rounded-2xl border border-white/10 p-6 relative overflow-hidden">
-              <div className="absolute top-4 right-4 w-[240px]">
+        <main className="px-10 pb-12">
+          {/* TOP 3 CARDS (same layout) + glass date picker in top-left */}
+          <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="glass p-6 relative overflow-hidden">
+              <div className="absolute top-4 left-4 w-[190px]">
                 <FlowDatePicker value={dayPick} onChange={setDayPick} />
               </div>
-
-              <div className="text-xs text-white/60">Production</div>
-              <div className="text-2xl font-semibold mt-1">Morning Flow Snapshot</div>
-              <div className="text-sm text-white/55 mt-1">Clean signal, no noise.</div>
-
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-xs text-white/60">Today’s production</div>
-                  <div className="mt-2 text-2xl font-semibold">${fmtMoney(todayProd)}</div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-xs text-white/60">This weeks production</div>
-                  <div className="mt-2 text-2xl font-semibold">${fmtMoney(weekProd)}</div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-xs text-white/60">This months production</div>
-                  <div className="mt-2 text-2xl font-semibold">${fmtMoney(monthProd)}</div>
-                </div>
+              <div className="pt-14">
+                <MiniStat
+                  label="Production"
+                  value={loading ? '—' : `$${formatMoneyPrecise(dayProduction)}`}
+                />
               </div>
             </div>
 
-            {/* FLOW TREND + GOALS (kept minimal / safe) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-              <div className="glass rounded-2xl border border-white/10 p-6">
-                <div className="text-xs text-white/60">Writing agents ✅</div>
-                <div className="mt-2 text-3xl font-semibold">{writingAgents}</div>
-                <div className="mt-1 text-xs text-white/50">On selected day</div>
+            <MiniStat label="Writing Agents ✅" value={loading ? '—' : String(writingAgents)} />
+
+            <MiniStat
+              label="Deals submitted"
+              value={loading ? '—' : String(dayDealsCount)}
+            />
+          </section>
+
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 glass p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold">Flow Trend</h2>
+                <span className="text-xs text-white/60">Last 7 days</span>
               </div>
 
-              <div className="glass rounded-2xl border border-white/10 p-6 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-white/60">Deals submitted</div>
-                    <div className="text-sm font-semibold mt-1">
-                      {topCompany?.name || 'No Data'}
-                    </div>
-                  </div>
-                  <TopCarrierDonut
-                    label={topCompany?.name || 'No Data'}
-                    value={topCompany?.share || 0}
-                  />
-                </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <FlowLineChart labels={lineLabels} values={lineValues} />
+              </div>
+
+              <div className="mt-6">
+                <GoalDonuts
+                  weeklyCurrent={weekDeals.length}
+                  weeklyGoal={weeklyGoal}
+                  monthlyCurrent={monthDeals.length}
+                  monthlyGoal={monthlyGoal}
+                />
+              </div>
+
+              {/* KPI CARDS (same layout, swapped copy + values) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <KPI
+                  title="Today’s production"
+                  value={loading ? '—' : `$${formatMoneyPrecise(todaysProduction)}`}
+                  sub=""
+                />
+                <KPI
+                  title="This weeks production"
+                  value={loading ? '—' : `$${formatMoneyPrecise(weeksProduction)}`}
+                  sub=""
+                />
+                <KPI
+                  title="This months production"
+                  value={loading ? '—' : `$${formatMoneyPrecise(monthsProduction)}`}
+                  sub=""
+                />
               </div>
             </div>
 
-            {/* RECENT ACTIVITY */}
-            <div className="glass rounded-2xl border border-white/10 p-6 mt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold">Recent activity</div>
-                  <div className="text-xs text-white/55 mt-1">Agent • Premium • Time (hour)</div>
-                </div>
+            <div className="glass p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold">Leaderboard</h2>
+                <Link href="/leaderboard" className="text-xs text-white/60 hover:underline">
+                  All results →
+                </Link>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/10 overflow-hidden">
-                <div className="grid grid-cols-3 text-[11px] text-white/55 bg-white/5 px-4 py-3">
-                  <div>Agent</div>
-                  <div>Premium ✅</div>
-                  <div>Time</div>
-                </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-5">
+                <CarrierDonut labels={carrierDist.labels} values={carrierDist.values} />
+              </div>
 
-                {loading && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
-
-                {!loading && recent.length === 0 && (
-                  <div className="px-4 py-6 text-sm text-white/60">No activity yet.</div>
+              {/* You first, then top 5 real */}
+              <div className="space-y-3">
+                {leaderRows.length === 0 ? (
+                  <Leader rank={1} name="You" amount={loading ? '—' : '$0.00'} highlight />
+                ) : (
+                  leaderRows.map((r, idx) => (
+                    <Leader
+                      key={r.user_id}
+                      rank={idx + 1}
+                      name={idx === 0 ? r.name : r.name}
+                      amount={loading ? '—' : `$${formatMoneyPrecise(r.premium)}`}
+                      highlight={idx === 0}
+                    />
+                  ))
                 )}
+              </div>
 
-                {!loading &&
-                  recent.map((r) => (
-                    <div key={r.id} className="grid grid-cols-3 px-4 py-3 border-t border-white/10">
-                      <div className="text-sm font-semibold">{r.agent}</div>
-                      <div className="text-sm">${fmtMoney(r.premium)}</div>
-                      <div className="text-sm text-white/70">{r.time}</div>
-                    </div>
-                  ))}
+              <div className="mt-4 text-xs text-white/50">
+                Top carrier this month: {loading ? '—' : topCarrier}
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* RIGHT: leaderboard preview */}
-          <div className="xl:col-span-1">
-            <div className="glass rounded-2xl border border-white/10 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs text-white/60">Leaderboard</div>
-                  <Link
-                    href="/leaderboard"
-                    className="text-sm font-semibold mt-1 inline-block hover:underline"
-                  >
-                    All results →
-                  </Link>
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-white/10 overflow-hidden">
-                <div className="grid grid-cols-2 text-[11px] text-white/55 bg-white/5 px-4 py-3">
-                  <div>Agent</div>
-                  <div className="text-right">Premium</div>
-                </div>
-
-                {loading && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
-
-                {!loading && top5Only.length === 0 && (
-                  <div className="px-4 py-6 text-sm text-white/60">No data yet.</div>
-                )}
-
-                {!loading &&
-                  top5Only.map((r, idx) => (
-                    <div key={r.id} className="grid grid-cols-2 px-4 py-3 border-t border-white/10">
-                      <div className="text-sm font-semibold">
-                        {idx === 0 ? `${r.name} (You)` : r.name}
-                      </div>
-                      <div className="text-sm text-right">${fmtMoney(r.premium)}</div>
-                    </div>
-                  ))}
-              </div>
-
-              <div className="mt-4 text-xs text-white/45">
-                Data window: This month • Updated {isoToPretty(new Date().toISOString())}
-              </div>
+          <section className="mt-6 glass p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold">Recent Activity</h2>
+              <span className="text-xs text-white/60">Latest submissions</span>
             </div>
-          </div>
-        </div>
+
+            <div className="rounded-2xl border border-white/10 overflow-hidden">
+              <Row head left="Agent" mid="Premium ✅" right="Time" />
+              {recentRows.map((r) => (
+                <Row
+                  key={r.id}
+                  left={recentNames.get(r.agentId) || 'Agent'}
+                  mid={`$${formatMoneyPrecise(r.premium)}`}
+                  right={byHour(r.dt)}
+                />
+              ))}
+              {!loading && parsed.length === 0 && <Row left="—" mid="No deals yet" right="—" />}
+            </div>
+          </section>
+        </main>
       </div>
     </div>
   )
 }
 
-const btnGlass =
-  'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+function KPI({ title, value, sub }: { title: string; value: string; sub: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <p className="text-xs text-white/60">{title}</p>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-3xl font-semibold">{value}</span>
+        {sub ? <span className="text-xs text-white/50">{sub}</span> : null}
+      </div>
+    </div>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="glass p-6">
+      <p className="text-sm text-white/60">{label}</p>
+      <p className="text-2xl font-semibold mt-1">{value}</p>
+    </div>
+  )
+}
+
+function Leader({
+  rank,
+  name,
+  amount,
+  highlight,
+}: {
+  rank: number
+  name: string
+  amount: string
+  highlight?: boolean
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between rounded-2xl border border-white/10 px-4 py-3 ${
+        highlight ? 'bg-white/10' : 'bg-white/5'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${
+            highlight ? 'bg-blue-600' : 'bg-white/10'
+          }`}
+        >
+          {rank}
+        </div>
+        <div>
+          <div className={`${highlight ? 'text-base font-semibold' : 'text-sm font-medium'}`}>
+            {name}
+          </div>
+          <div className="text-xs text-white/50">Monthly production</div>
+        </div>
+      </div>
+
+      <div className={`${highlight ? 'text-lg font-semibold' : 'text-sm font-semibold'} text-green-400`}>
+        {amount}
+      </div>
+    </div>
+  )
+}
+
+function Row({
+  head,
+  left,
+  mid,
+  right,
+}: {
+  head?: boolean
+  left: string
+  mid: string
+  right: string
+}) {
+  return (
+    <div
+      className={`grid grid-cols-3 px-4 py-3 border-b border-white/10 ${
+        head ? 'text-xs text-white/60 bg-white/5' : 'text-sm'
+      }`}
+    >
+      <div>{left}</div>
+      <div className="text-center">{mid}</div>
+      <div className="text-right">{right}</div>
+    </div>
+  )
+}
+
+function formatMoneyPrecise(n: number) {
+  const num = Number(n || 0)
+  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function byHour(d: Date) {
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
+
+function timeAgo(d: Date) {
+  const diff = Date.now() - d.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h`
+  const days = Math.floor(hrs / 24)
+  return `${days}d`
+}
