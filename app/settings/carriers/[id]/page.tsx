@@ -1,56 +1,59 @@
-// ✅ CREATE FILE: /app/settings/carriers/[id]/page.tsx
+// app/settings/carriers/[id]/page.tsx
 'use client'
 
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Sidebar from '@/app/components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 
 type Profile = {
   id: string
-  role: string
+  role: string | null
 }
 
-type Carrier = {
+type CarrierRow = {
   id: string
-  custom_name: string
-  supported_name: string
-  advance_rate: number
+  custom_name: string | null
+  supported_name: string | null
+  advance_rate: number | null
+  active: boolean | null
 }
 
-type Product = {
+type ProductRow = {
   id: string
   carrier_id: string
-  product_name: string
-  sort_order: number
-  is_active: boolean
+  name: string | null
+  created_at: string
 }
 
-type CompRate = {
+type CompRow = {
   id: string
   product_id: string
-  comp_percent: number
+  comp_level: number
   rate: number | null
 }
 
-const DEFAULT_COMPS = [125, 115, 110, 105, 100, 95, 90, 85, 80, 75, 70] // you can edit per product
+const COMP_LEVELS_A = [115, 105, 100, 95, 90, 85, 80, 75, 70, 65, 60] as const
+const COMP_LEVELS_B = [125, 115, 110, 105, 100, 95, 90, 85, 80, 75, 70] as const
 
 export default function CarrierDetailPage() {
+  const router = useRouter()
   const params = useParams()
   const carrierId = String((params as any)?.id || '')
 
-  const [me, setMe] = useState<Profile | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [me, setMe] = useState<Profile | null>(null)
 
   const [loading, setLoading] = useState(true)
-  const [carrier, setCarrier] = useState<Carrier | null>(null)
-  const [products, setProducts] = useState<Product[]>([])
-  const [rates, setRates] = useState<CompRate[]>([])
+  const [carrier, setCarrier] = useState<CarrierRow | null>(null)
+
+  const [products, setProducts] = useState<ProductRow[]>([])
+  const [comps, setComps] = useState<CompRow[]>([])
 
   const [createProductOpen, setCreateProductOpen] = useState(false)
-  const [newProduct, setNewProduct] = useState({ product_name: '', compPercents: DEFAULT_COMPS.join(',') })
+  const [newProduct, setNewProduct] = useState({ name: 'Final Expense (Modified)', schema: 'A' as 'A' | 'B' })
 
   useEffect(() => {
     if (!carrierId) return
@@ -61,150 +64,161 @@ export default function CarrierDetailPage() {
   async function boot() {
     setLoading(true)
 
-    const { data: u } = await supabase.auth.getUser()
-    const uid = u.user?.id
+    const { data: ures, error: uerr } = await supabase.auth.getUser()
+    if (uerr) {
+      setToast(`auth.getUser: ${uerr.message}`)
+      setLoading(false)
+      return
+    }
+    const uid = ures.user?.id
     if (!uid) {
       window.location.href = '/login'
       return
     }
 
-    const { data: prof } = await supabase.from('profiles').select('id,role').eq('id', uid).single()
-    if (!prof) {
-      setToast('Profile missing')
+    const { data: prof, error: perr } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', uid)
+      .single()
+
+    if (perr || !prof) {
+      setToast('Could not load profile')
       setLoading(false)
       return
     }
+
     const p = prof as Profile
     setMe(p)
 
-    if (p.role !== 'admin') {
-      setToast('Admins only')
+    if ((p.role || '').toLowerCase() !== 'admin') {
+      setToast('Locked: Admins only')
       setLoading(false)
       return
     }
 
-    const { data: car, error: carErr } = await supabase
-      .from('carriers')
-      .select('id,custom_name,supported_name,advance_rate')
-      .eq('id', carrierId)
-      .single()
-
-    if (carErr || !car) {
-      setToast('Carrier not found')
-      setLoading(false)
-      return
-    }
-    setCarrier(car as Carrier)
-
-    const { data: prods } = await supabase
-      .from('carrier_products')
-      .select('id,carrier_id,product_name,sort_order,is_active')
-      .eq('carrier_id', carrierId)
-      .order('sort_order', { ascending: true })
-      .limit(5000)
-
-    setProducts((prods || []) as Product[])
-
-    const prodIds = (prods || []).map((x: any) => x.id)
-    if (prodIds.length) {
-      const { data: r } = await supabase
-        .from('carrier_comp_rates')
-        .select('id,product_id,comp_percent,rate')
-        .in('product_id', prodIds)
-        .limit(50000)
-      setRates((r || []) as CompRate[])
-    } else {
-      setRates([])
-    }
-
+    await loadAll()
     setLoading(false)
   }
 
-  const rateMap = useMemo(() => {
-    const m = new Map<string, CompRate>()
-    rates.forEach((r) => m.set(`${r.product_id}:${r.comp_percent}`, r))
-    return m
-  }, [rates])
-
-  async function createProduct() {
-    if (!carrier) return
-    const name = newProduct.product_name.trim()
-    if (!name) return setToast('Product name required')
-
-    // create product
-    const { data: inserted, error } = await supabase
-      .from('carrier_products')
-      .insert({
-        carrier_id: carrier.id,
-        product_name: name,
-        sort_order: products.length,
-        is_active: true,
-      })
-      .select('id')
+  async function loadAll() {
+    const { data: cdata, error: cerr } = await supabase
+      .from('carriers')
+      .select('id, custom_name, supported_name, advance_rate, active')
+      .eq('id', carrierId)
       .single()
 
-    if (error || !inserted?.id) return setToast('Create product failed (RLS?)')
+    if (cerr || !cdata) {
+      setToast('Could not load carrier (RLS?)')
+      setCarrier(null)
+      return
+    }
 
-    // seed comp percents
-    const comps = newProduct.compPercents
-      .split(',')
-      .map((x) => Number(x.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0)
+    setCarrier(cdata as CarrierRow)
 
-    const uniq = Array.from(new Set(comps))
-    if (uniq.length) {
-      await supabase.from('carrier_comp_rates').insert(
-        uniq.map((cp) => ({
-          product_id: inserted.id,
-          comp_percent: cp,
-          rate: null,
-        }))
+    const { data: pdata, error: perr } = await supabase
+      .from('carrier_products')
+      .select('id, carrier_id, name, created_at')
+      .eq('carrier_id', carrierId)
+      .order('created_at', { ascending: true })
+      .limit(2000)
+
+    if (perr) {
+      setToast('Could not load products')
+      setProducts([])
+      setComps([])
+      return
+    }
+
+    const prows = (pdata || []) as ProductRow[]
+    setProducts(prows)
+
+    if (!prows.length) {
+      setComps([])
+      return
+    }
+
+    const { data: crows, error: cerr2 } = await supabase
+      .from('carrier_product_comp')
+      .select('id, product_id, comp_level, rate')
+      .in(
+        'product_id',
+        prows.map((p) => p.id)
       )
+      .limit(5000)
+
+    if (cerr2) {
+      setToast('Could not load comp table')
+      setComps([])
+      return
     }
 
-    setToast('Product added ✅')
+    setComps((crows || []) as CompRow[])
+  }
+
+  const compMap = useMemo(() => {
+    // key: `${productId}:${level}`
+    const m = new Map<string, number | null>()
+    for (const r of comps) m.set(`${r.product_id}:${r.comp_level}`, r.rate ?? null)
+    return m
+  }, [comps])
+
+  function getLevelsForProduct(name: string | null) {
+    const n = (name || '').toLowerCase()
+    // crude default: modified -> schema A, preferred/standard -> schema B
+    if (n.includes('preferred') || n.includes('standard')) return COMP_LEVELS_B
+    if (n.includes('modified')) return COMP_LEVELS_A
+    return COMP_LEVELS_A
+  }
+
+  async function createProduct() {
+    if (!carrierId) return
+
+    const { data: inserted, error } = await supabase
+      .from('carrier_products')
+      .insert({ carrier_id: carrierId, name: newProduct.name.trim() || null })
+      .select('id, carrier_id, name, created_at')
+      .single()
+
+    if (error || !inserted) {
+      setToast('Create product failed (RLS?)')
+      return
+    }
+
+    // seed comp rows (blank rates)
+    const levels = newProduct.schema === 'B' ? COMP_LEVELS_B : COMP_LEVELS_A
+    const seed = levels.map((lvl) => ({ product_id: inserted.id, comp_level: lvl, rate: null }))
+
+    await supabase.from('carrier_product_comp').insert(seed)
+
+    setToast('Product created ✅')
     setCreateProductOpen(false)
-    setNewProduct({ product_name: '', compPercents: DEFAULT_COMPS.join(',') })
-    boot()
+    setNewProduct({ name: 'Final Expense (Modified)', schema: 'A' })
+    loadAll()
   }
 
-  async function updateRate(productId: string, compPercent: number, value: string) {
-    const key = `${productId}:${compPercent}`
-    const existing = rateMap.get(key)
-    const rateNum = value.trim() === '' ? null : Number(value)
+  async function saveRate(productId: string, level: number, rateStr: string) {
+    const rate = toNum(rateStr)
+    const { error } = await supabase
+      .from('carrier_product_comp')
+      .upsert(
+        { product_id: productId, comp_level: level, rate },
+        { onConflict: 'product_id,comp_level' }
+      )
 
-    if (value.trim() !== '' && !Number.isFinite(rateNum)) return
-
-    if (existing) {
-      const { error } = await supabase
-        .from('carrier_comp_rates')
-        .update({ rate: rateNum })
-        .eq('id', existing.id)
-      if (error) return setToast('Save failed')
-    } else {
-      const { error } = await supabase.from('carrier_comp_rates').insert({
-        product_id: productId,
-        comp_percent: compPercent,
-        rate: rateNum,
-      })
-      if (error) return setToast('Save failed')
+    if (error) {
+      setToast('Save failed (RLS?)')
+      return
     }
 
-    // refresh local
-    boot()
-  }
-
-  const compsByProduct = useMemo(() => {
-    const out = new Map<string, number[]>()
-    products.forEach((p) => {
-      const cps = rates
-        .filter((r) => r.product_id === p.id)
-        .map((r) => r.comp_percent)
-        .sort((a, b) => b - a)
-      out.set(p.id, cps.length ? cps : DEFAULT_COMPS)
+    setComps((prev) => {
+      const next = prev.slice()
+      const idx = next.findIndex((r) => r.product_id === productId && r.comp_level === level)
+      if (idx >= 0) next[idx] = { ...next[idx], rate }
+      else next.push({ id: `tmp-${productId}-${level}`, product_id: productId, comp_level: level, rate })
+      return next
     })
-    return out
-  }, [products, rates])
+  }
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
@@ -226,115 +240,130 @@ export default function CarrierDetailPage() {
       <div className="ml-64 px-10 py-10">
         <div className="mb-8 flex items-end justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">{carrier?.custom_name || 'Carrier'}</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {carrier?.custom_name || 'Carrier'} <span className="text-white/50">· Comp Sheet</span>
+            </h1>
             <p className="text-sm text-white/60 mt-1">
-              Comp Sheet + Products (Admin only)
+              Supported: {carrier?.supported_name || '—'} · Advance rate: {carrier?.advance_rate ?? 0.75}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button onClick={() => (window.location.href = '/settings')} className={btnGlass}>
-              Back to Settings
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.push('/settings/carriers')} className={btnGlass}>
+              Back
             </button>
-            <button onClick={() => setCreateProductOpen(true)} className={saveBtn}>
-              Create Product
+            <button onClick={() => setCreateProductOpen(true)} className={btnPink}>
+              Add Product
+            </button>
+            <button onClick={loadAll} className={btnGlass}>
+              Refresh
             </button>
           </div>
         </div>
 
         <div className="glass rounded-2xl border border-white/10 p-6">
           {loading ? (
-            <div className="py-12 text-center text-white/60">Loading…</div>
-          ) : me?.role !== 'admin' ? (
-            <div className="py-12 text-center text-white/60">Admins only.</div>
+            <div className="py-10 text-center text-white/60">Loading…</div>
+          ) : !carrier ? (
+            <div className="py-10 text-center text-white/60">Carrier not found.</div>
           ) : (
-            <div className="space-y-6">
-              {products.length === 0 && (
+            <>
+              {products.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
-                  No products yet. Click <b>Create Product</b>.
+                  No products yet. Click <b>Add Product</b>.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {products.map((p) => {
+                    const levels = getLevelsForProduct(p.name)
+                    return (
+                      <div key={p.id} className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+                        <div className="px-5 py-4 bg-white/5 flex items-center justify-between border-b border-white/10">
+                          <div className="text-sm font-semibold">{p.name || 'Product'}</div>
+                          <div className="text-xs text-white/55">Edit cells to save</div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="text-[11px] text-white/55">
+                              <tr className="border-b border-white/10">
+                                <th className={thSticky}>Comp</th>
+                                {levels.map((lvl) => (
+                                  <th key={lvl} className={thCenter}>
+                                    {lvl.toFixed(2)}%
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-white/10">
+                                <td className={tdSticky}>Rate</td>
+                                {levels.map((lvl) => {
+                                  const key = `${p.id}:${lvl}`
+                                  const val = compMap.get(key)
+                                  return (
+                                    <td key={lvl} className={tdCenter}>
+                                      <input
+                                        className={cellInput}
+                                        defaultValue={val ?? ''}
+                                        placeholder="—"
+                                        onBlur={(e) => saveRate(p.id, lvl, e.target.value)}
+                                      />
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="px-5 py-4 text-[11px] text-white/55">
+                          Tip: keep rates simple (example: <b>0.75</b>).
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
-
-              {products.map((p) => {
-                const cols = compsByProduct.get(p.id) || DEFAULT_COMPS
-                return (
-                  <div key={p.id} className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-                    <div className="px-5 py-4 flex items-center justify-between border-b border-white/10">
-                      <div className="text-sm font-semibold">{p.product_name}</div>
-                      <div className="text-xs text-white/60">Comp Sheet</div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="text-[11px] text-white/60">
-                          <tr className="border-b border-white/10">
-                            <th className="text-left px-5 py-3 whitespace-nowrap">Comp %</th>
-                            <th className="text-left px-5 py-3 whitespace-nowrap">Rate</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cols.map((cp) => {
-                            const existing = rateMap.get(`${p.id}:${cp}`)
-                            return (
-                              <tr key={cp} className="border-b border-white/10">
-                                <td className="px-5 py-3 font-semibold whitespace-nowrap">{cp.toFixed(2)}%</td>
-                                <td className="px-5 py-3">
-                                  <input
-                                    className={inputCls}
-                                    defaultValue={existing?.rate ?? ''}
-                                    placeholder="(optional)"
-                                    onBlur={(e) => updateRate(p.id, cp, e.target.value)}
-                                  />
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="px-5 py-3 text-[11px] text-white/50">
-                      Tip: click into the Rate field, edit, then click outside to auto-save.
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* CREATE PRODUCT MODAL */}
+      {/* ADD PRODUCT MODAL */}
       {createProductOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-2xl">
+          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-3xl">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-lg font-semibold">Add Product</div>
-                <div className="text-xs text-white/55 mt-1">Creates comp rows for this product.</div>
+                <div className="text-xs text-white/55 mt-1">Creates a new comp table row set.</div>
               </div>
+
               <button onClick={() => setCreateProductOpen(false)} className={closeBtn}>
                 Close
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Product name">
                 <input
                   className={inputCls}
-                  value={newProduct.product_name}
-                  onChange={(e) => setNewProduct((p) => ({ ...p, product_name: e.target.value }))}
+                  value={newProduct.name}
+                  onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
                   placeholder="Final Expense (Preferred/Standard)"
                 />
               </Field>
 
-              <Field label="Comp percents (comma-separated)">
-                <input
+              <Field label="Comp schema">
+                <select
                   className={inputCls}
-                  value={newProduct.compPercents}
-                  onChange={(e) => setNewProduct((p) => ({ ...p, compPercents: e.target.value }))}
-                  placeholder="125,115,110,105,100,95,90,85,80,75,70"
-                />
+                  value={newProduct.schema}
+                  onChange={(e) => setNewProduct((p) => ({ ...p, schema: e.target.value as any }))}
+                >
+                  <option value="A">115/105/100/…/60</option>
+                  <option value="B">125/115/110/…/70</option>
+                </select>
               </Field>
             </div>
 
@@ -342,8 +371,8 @@ export default function CarrierDetailPage() {
               <button onClick={() => setCreateProductOpen(false)} className={closeBtn}>
                 Cancel
               </button>
-              <button onClick={createProduct} className={saveBtn}>
-                Add Product
+              <button onClick={createProduct} className={btnPink}>
+                Create
               </button>
             </div>
           </div>
@@ -362,15 +391,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+function toNum(v: any) {
+  if (v === null || v === undefined || v === '') return null
+  const num = Number(String(v).replace(/[^0-9.]/g, ''))
+  return Number.isFinite(num) ? num : null
+}
+
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-[#0b0f1a]/30 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
-
+  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+const btnGlass =
+  'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
 const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
-
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-
 const closeBtn =
   'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-3 text-sm font-semibold'
+const btnPink =
+  'rounded-2xl bg-fuchsia-600 hover:bg-fuchsia-500 transition px-5 py-3 text-sm font-semibold'
 
-const saveBtn =
-  'rounded-2xl bg-green-600 hover:bg-green-500 transition px-5 py-3 text-sm font-semibold'
+const thSticky =
+  'text-left px-5 py-3 whitespace-nowrap sticky left-0 bg-[#0b0f1a] z-10 border-r border-white/10'
+const thCenter = 'text-center px-5 py-3 whitespace-nowrap'
+const tdSticky =
+  'px-5 py-4 font-semibold whitespace-nowrap sticky left-0 bg-[#0b0f1a] z-10 border-r border-white/10'
+const tdCenter = 'px-5 py-4 text-center whitespace-nowrap'
+
+const cellInput =
+  'w-28 text-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20 focus:bg-white/10'
