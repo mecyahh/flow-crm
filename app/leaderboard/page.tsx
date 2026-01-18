@@ -1,6 +1,6 @@
-// ✅ REPLACE ENTIRE FILE: /app/leaderboard/page.tsx
-
 'use client'
+
+export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
 import Sidebar from '../components/Sidebar'
