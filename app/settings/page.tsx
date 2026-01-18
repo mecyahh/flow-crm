@@ -1,4 +1,3 @@
-// ✅ REPLACE ENTIRE FILE: /app/settings/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -7,12 +6,15 @@ import { supabase } from '@/lib/supabaseClient'
 
 type Profile = {
   id: string
+  created_at?: string
   email: string | null
   first_name: string | null
   last_name: string | null
-  role: string
+  role: string // 'agent' | 'admin'
   is_agency_owner: boolean
-  theme: string | null
+  upline_id?: string | null
+  comp?: number | null
+  theme?: string | null
   avatar_url: string | null
 }
 
@@ -35,17 +37,55 @@ const SUPPORTED_NAMES = [
   'Mutual of Omaha',
 ] as const
 
+const THEMES = [
+  { key: 'blue', label: 'Grey / Blue / White' },
+  { key: 'gold', label: 'Grey / Gold / Black & White' },
+  { key: 'green', label: 'Grey / Green / White' },
+  { key: 'red', label: 'Grey / Red / Black & White' },
+  { key: 'mono', label: 'Grey / White' },
+  { key: 'fuchsia', label: 'Grey / Fuchsia' },
+  { key: 'bw', label: 'White / Black' },
+  { key: 'orange', label: 'Grey / Orange' },
+] as const
+
+const COMP_VALUES = Array.from({ length: 41 }, (_, i) => i * 5) // 0..200 in 5% steps
+
 export default function SettingsPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [me, setMe] = useState<Profile | null>(null)
 
-  const [tab, setTab] = useState<'profile' | 'carriers'>('profile')
+  const [tab, setTab] = useState<'profile' | 'agents' | 'positions' | 'carriers'>('profile')
 
   // Profile
   const [pFirst, setPFirst] = useState('')
   const [pLast, setPLast] = useState('')
   const [pEmail, setPEmail] = useState('')
   const [avatarPreview, setAvatarPreview] = useState<string>('')
+
+  // Agents (admin/owner)
+  const [agents, setAgents] = useState<Profile[]>([])
+  const [loadingAgents, setLoadingAgents] = useState(false)
+  const [agentSearch, setAgentSearch] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
+
+  const [invite, setInvite] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    upline_id: '',
+    comp: 70,
+    role: 'agent',
+    is_agency_owner: false,
+    theme: 'blue',
+  })
+
+  // Positions (admin/owner)
+  const [pos, setPos] = useState({
+    user_id: '',
+    upline_id: '',
+    comp: 70,
+    effective_date: '', // optional (stored by your API if supported)
+  })
 
   // Carriers (admin only)
   const [loadingCarriers, setLoadingCarriers] = useState(false)
@@ -62,6 +102,10 @@ export default function SettingsPage() {
   const [dealCountsBySupported, setDealCountsBySupported] = useState<Map<string, number>>(new Map())
   const [productCountsByCarrier, setProductCountsByCarrier] = useState<Map<string, number>>(new Map())
 
+  const isAdmin = me?.role === 'admin'
+  const isOwner = !!me?.is_agency_owner
+  const canManageAgents = isAdmin || isOwner
+
   useEffect(() => {
     boot()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,8 +119,8 @@ export default function SettingsPage() {
       return
     }
 
-    const { data: prof } = await supabase.from('profiles').select('*').eq('id', uid).single()
-    if (!prof) return
+    const { data: prof, error: profErr } = await supabase.from('profiles').select('*').eq('id', uid).single()
+    if (profErr || !prof) return
 
     const p = prof as Profile
     setMe(p)
@@ -86,14 +130,26 @@ export default function SettingsPage() {
     setPEmail(p.email || '')
     setAvatarPreview(p.avatar_url || '')
 
-    // default tab
-    setTab('profile')
+    // load agents for admin/owner
+    if (p.role === 'admin' || p.is_agency_owner) {
+      await loadAgents()
+    }
 
     // admin-only load carriers
     if (p.role === 'admin') {
       await loadCarriers()
       await loadCarrierStats()
     }
+
+    // default tab
+    if (p.role === 'admin' || p.is_agency_owner) setTab('agents')
+    else setTab('profile')
+  }
+
+  async function authHeader() {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return token ? `Bearer ${token}` : ''
   }
 
   async function saveProfile() {
@@ -140,6 +196,105 @@ export default function SettingsPage() {
     window.location.href = '/login'
   }
 
+  async function loadAgents() {
+    setLoadingAgents(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(5000)
+
+    if (error) setToast('Could not load agents')
+    setAgents((data || []) as Profile[])
+    setLoadingAgents(false)
+  }
+
+  const filteredAgents = useMemo(() => {
+    const q = agentSearch.trim().toLowerCase()
+    if (!q) return agents
+    return agents.filter((a) => {
+      const b = [a.first_name, a.last_name, a.email].filter(Boolean).join(' ').toLowerCase()
+      return b.includes(q)
+    })
+  }, [agents, agentSearch])
+
+  const uplineOptions = useMemo(() => {
+    return agents
+      .slice()
+      .sort((a, b) => {
+        const an = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase()
+        const bn = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase()
+        return an.localeCompare(bn)
+      })
+      .map((a) => ({
+        id: a.id,
+        label: `${(a.first_name || '').trim()} ${(a.last_name || '').trim()}${a.email ? ` • ${a.email}` : ''}`.trim(),
+      }))
+  }, [agents])
+
+  async function inviteAgent() {
+    const token = await authHeader()
+    if (!token) return setToast('Not logged in')
+
+    if (!invite.email.trim()) return setToast('Email required')
+
+    const res = await fetch('/api/admin/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: token },
+      body: JSON.stringify({
+        email: invite.email.trim(),
+        first_name: invite.first_name.trim() || null,
+        last_name: invite.last_name.trim() || null,
+        upline_id: invite.upline_id || null,
+        comp: invite.comp,
+        role: invite.role,
+        is_agency_owner: invite.is_agency_owner,
+        theme: invite.theme,
+      }),
+    })
+
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return setToast(json.error || 'Invite failed')
+
+    setToast('Invite sent ✅')
+    setInviteOpen(false)
+    setInvite({
+      first_name: '',
+      last_name: '',
+      email: '',
+      upline_id: '',
+      comp: 70,
+      role: 'agent',
+      is_agency_owner: false,
+      theme: 'blue',
+    })
+    loadAgents()
+  }
+
+  async function updatePosition() {
+    const token = await authHeader()
+    if (!token) return setToast('Not logged in')
+    if (!pos.user_id) return setToast('Select a user')
+
+    const res = await fetch('/api/admin/position', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: token },
+      body: JSON.stringify({
+        user_id: pos.user_id,
+        upline_id: pos.upline_id || null,
+        comp: pos.comp,
+        effective_date: pos.effective_date || null,
+      }),
+    })
+
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return setToast(json.error || 'Update failed')
+
+    setToast('Position updated ✅')
+    setPos({ user_id: '', upline_id: '', comp: 70, effective_date: '' })
+    loadAgents()
+  }
+
   async function loadCarriers() {
     setLoadingCarriers(true)
     const { data, error } = await supabase
@@ -154,8 +309,6 @@ export default function SettingsPage() {
   }
 
   async function loadCarrierStats() {
-    // Policies Sold = how many deals exist by company (we match on supported_name)
-    // Products = count in carrier_products per carrier
     const { data: deals } = await supabase.from('deals').select('id,company').limit(50000)
     const mapDeals = new Map<string, number>()
     ;(deals || []).forEach((d: any) => {
@@ -205,8 +358,6 @@ export default function SettingsPage() {
     await loadCarrierStats()
   }
 
-  const isAdmin = me?.role === 'admin'
-
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
@@ -228,30 +379,31 @@ export default function SettingsPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-            <p className="text-sm text-white/60 mt-1">Profile + Admin-only carrier config.</p>
+            <p className="text-sm text-white/60 mt-1">
+              Profile + {canManageAgents ? 'Agent Management' : 'Basics'} {isAdmin ? '+ Carrier Config' : ''}
+            </p>
           </div>
 
           <div className="flex gap-2">
-            <button
-              onClick={() => setTab('profile')}
-              className={[
-                'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
-                tab === 'profile' ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10 hover:bg-white/10',
-              ].join(' ')}
-            >
+            <TabBtn active={tab === 'profile'} onClick={() => setTab('profile')}>
               Profile
-            </button>
+            </TabBtn>
+
+            {canManageAgents && (
+              <>
+                <TabBtn active={tab === 'agents'} onClick={() => setTab('agents')}>
+                  Agents
+                </TabBtn>
+                <TabBtn active={tab === 'positions'} onClick={() => setTab('positions')}>
+                  Positions
+                </TabBtn>
+              </>
+            )}
 
             {isAdmin && (
-              <button
-                onClick={() => setTab('carriers')}
-                className={[
-                  'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
-                  tab === 'carriers' ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10 hover:bg-white/10',
-                ].join(' ')}
-              >
+              <TabBtn active={tab === 'carriers'} onClick={() => setTab('carriers')}>
                 Carriers
-              </button>
+              </TabBtn>
             )}
           </div>
         </div>
@@ -282,7 +434,6 @@ export default function SettingsPage() {
                 <input className={inputCls} value={pEmail} onChange={(e) => setPEmail(e.target.value)} />
               </Field>
 
-              {/* Upload */}
               <Field label="Profile Picture (Upload)">
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <input
@@ -309,7 +460,11 @@ export default function SettingsPage() {
               <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center gap-4">
                 <div className="text-xs text-white/60">Preview</div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={avatarPreview} alt="avatar" className="h-12 w-12 rounded-2xl border border-white/10 object-cover" />
+                <img
+                  src={avatarPreview}
+                  alt="avatar"
+                  className="h-12 w-12 rounded-2xl border border-white/10 object-cover"
+                />
               </div>
             )}
 
@@ -319,15 +474,156 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* CARRIERS (ADMIN ONLY) */}
+        {/* AGENTS */}
+        {tab === 'agents' && canManageAgents && (
+          <div className="glass rounded-2xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <div className="text-sm font-semibold">Agents</div>
+                <div className="text-xs text-white/55 mt-1">Invite users + view current roster.</div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button onClick={() => setInviteOpen(true)} className={saveBtn}>
+                  Add Agent
+                </button>
+                <button onClick={loadAgents} className={btnGlass}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2 mb-4">
+              <input
+                className="bg-transparent outline-none text-sm w-full placeholder:text-white/40"
+                placeholder="Search agents…"
+                value={agentSearch}
+                onChange={(e) => setAgentSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="rounded-2xl border border-white/10 overflow-hidden">
+              <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
+                <div className="col-span-4">Agent</div>
+                <div className="col-span-4">Email</div>
+                <div className="col-span-2 text-center">Role</div>
+                <div className="col-span-2 text-right">Comp</div>
+              </div>
+
+              {loadingAgents && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
+
+              {!loadingAgents &&
+                filteredAgents.map((a) => {
+                  const name = `${a.first_name || '—'} ${a.last_name || ''}`.trim()
+                  return (
+                    <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm">
+                      <div className="col-span-4 font-semibold">
+                        {name}
+                        {a.is_agency_owner ? (
+                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
+                            Owner
+                          </span>
+                        ) : null}
+                        {a.role === 'admin' ? (
+                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
+                            Admin
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="col-span-4 text-white/75">{a.email || '—'}</div>
+                      <div className="col-span-2 text-center text-white/70">{a.role || 'agent'}</div>
+                      <div className="col-span-2 text-right text-white/80">
+                        {typeof a.comp === 'number' ? `${a.comp}%` : '—'}
+                      </div>
+                    </div>
+                  )
+                })}
+
+              {!loadingAgents && filteredAgents.length === 0 && (
+                <div className="px-4 py-6 text-sm text-white/60">No agents.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* POSITIONS */}
+        {tab === 'positions' && canManageAgents && (
+          <div className="glass rounded-2xl border border-white/10 p-6">
+            <div className="text-sm font-semibold">Positions</div>
+            <div className="text-xs text-white/55 mt-1">Update upline + comp. (Effective date optional.)</div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+              <Field label="Select User">
+                <select
+                  className={inputCls}
+                  value={pos.user_id}
+                  onChange={(e) => setPos((p) => ({ ...p, user_id: e.target.value }))}
+                >
+                  <option value="">Select…</option>
+                  {uplineOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Upline (optional)">
+                <select
+                  className={inputCls}
+                  value={pos.upline_id}
+                  onChange={(e) => setPos((p) => ({ ...p, upline_id: e.target.value }))}
+                >
+                  <option value="">None…</option>
+                  {uplineOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Comp % (5% increments)">
+                <select
+                  className={inputCls}
+                  value={pos.comp}
+                  onChange={(e) => setPos((p) => ({ ...p, comp: Number(e.target.value) }))}
+                >
+                  {COMP_VALUES.map((v) => (
+                    <option key={v} value={v}>
+                      {v}%
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <Field label="Effective Date (optional)">
+              <input
+                className={inputCls}
+                value={pos.effective_date}
+                onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))}
+                placeholder="YYYY-MM-DD"
+              />
+            </Field>
+
+            <button onClick={updatePosition} className={saveWide}>
+              Save Position
+            </button>
+
+            <div className="mt-3 text-xs text-white/50">
+              If this fails, your <b>/api/admin/position</b> route or RLS is blocking updates.
+            </div>
+          </div>
+        )}
+
+        {/* CARRIERS */}
         {tab === 'carriers' && isAdmin && (
           <div className="glass rounded-2xl border border-white/10 p-6">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Carriers</div>
-                <div className="text-xs text-white/55 mt-1">
-                  Admin-only. Click a carrier row to open its comp sheet + products.
-                </div>
+                <div className="text-xs text-white/55 mt-1">Admin-only. Click a carrier row to open details.</div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -392,6 +688,97 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* INVITE MODAL */}
+      {inviteOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-3xl">
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <div className="text-lg font-semibold">Add Agent</div>
+                <div className="text-xs text-white/55 mt-1">Sends an email invite to create their login.</div>
+              </div>
+
+              <button onClick={() => setInviteOpen(false)} className={closeBtn}>
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="First Name">
+                <input className={inputCls} value={invite.first_name} onChange={(e) => setInvite((p) => ({ ...p, first_name: e.target.value }))} />
+              </Field>
+
+              <Field label="Last Name">
+                <input className={inputCls} value={invite.last_name} onChange={(e) => setInvite((p) => ({ ...p, last_name: e.target.value }))} />
+              </Field>
+
+              <Field label="Email">
+                <input className={inputCls} value={invite.email} onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))} />
+              </Field>
+
+              <Field label="Upline (optional)">
+                <select className={inputCls} value={invite.upline_id} onChange={(e) => setInvite((p) => ({ ...p, upline_id: e.target.value }))}>
+                  <option value="">None…</option>
+                  {uplineOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Comp %">
+                <select className={inputCls} value={invite.comp} onChange={(e) => setInvite((p) => ({ ...p, comp: Number(e.target.value) }))}>
+                  {COMP_VALUES.map((v) => (
+                    <option key={v} value={v}>
+                      {v}%
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Role">
+                <select className={inputCls} value={invite.role} onChange={(e) => setInvite((p) => ({ ...p, role: e.target.value }))}>
+                  <option value="agent">Agent</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </Field>
+
+              <Field label="Agency Owner">
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={invite.is_agency_owner}
+                    onChange={(e) => setInvite((p) => ({ ...p, is_agency_owner: e.target.checked }))}
+                    className="h-5 w-5"
+                  />
+                  <div className="text-sm">Mark as Agency Owner</div>
+                </div>
+              </Field>
+
+              <Field label="Theme">
+                <select className={inputCls} value={invite.theme} onChange={(e) => setInvite((p) => ({ ...p, theme: e.target.value }))}>
+                  {THEMES.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setInviteOpen(false)} className={closeBtn}>
+                Cancel
+              </button>
+              <button onClick={inviteAgent} className={saveBtn}>
+                Invite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CREATE CARRIER MODAL */}
       {createOpen && (
@@ -462,6 +849,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="text-[11px] text-white/55 mb-2">{label}</div>
       {children}
     </div>
+  )
+}
+
+function TabBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
+        active ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10 hover:bg-white/10',
+      ].join(' ')}
+    >
+      {children}
+    </button>
   )
 }
 
