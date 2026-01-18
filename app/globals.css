@@ -1,3 +1,21 @@
+:root{
+  --accent:#3b82f6;
+  --accent2:#60a5fa;
+  --accentText:#ffffff;
+  --card:rgba(255,255,255,0.05);
+  --cardBorder:rgba(255,255,255,0.10);
+  --glow:rgba(59,130,246,0.35);
+}
+
+/* optional helpers if you want consistent theme usage */
+.glass{
+  background: var(--card);
+  border: 1px solid var(--cardBorder);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-radius: 16px;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
