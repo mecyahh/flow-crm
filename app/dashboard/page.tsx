@@ -1,341 +1,458 @@
+// ✅ REPLACE ENTIRE FILE: /app/dashboard/page.tsx
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import Sidebar from '../components/Sidebar'
-import FlowLineChart from '../components/FlowLineChart'
-import CarrierDonut from '../components/CarrierDonut'
-import GoalDonuts from '../components/GoalDonuts'
 import { supabase } from '@/lib/supabaseClient'
+import FlowDatePicker from '@/app/components/FlowDatePicker'
+
+type Profile = {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  email: string | null
+}
 
 type DealRow = {
   id: string
-  user_id: string
   created_at: string
-  premium: any
-  company: string | null
+  agent_id: string | null
+  premium: number | null
+}
+
+function money(n: number) {
+  return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' })
+}
+
+function toISODate(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function startOfDayISO(d: Date) {
+  const dd = new Date(d)
+  dd.setHours(0, 0, 0, 0)
+  return dd.toISOString()
+}
+function endOfDayISO(d: Date) {
+  const dd = new Date(d)
+  dd.setHours(23, 59, 59, 999)
+  return dd.toISOString()
+}
+function startOfWeekISO(d: Date) {
+  const dd = new Date(d)
+  const day = (dd.getDay() + 6) % 7 // Mon=0
+  dd.setDate(dd.getDate() - day)
+  dd.setHours(0, 0, 0, 0)
+  return dd.toISOString()
+}
+function startOfMonthISO(d: Date) {
+  const dd = new Date(d.getFullYear(), d.getMonth(), 1)
+  dd.setHours(0, 0, 0, 0)
+  return dd.toISOString()
+}
+
+function hourLabel(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
+
+function nameFromProfile(p?: Profile | null) {
+  if (!p) return ''
+  const n = `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim()
+  return n || (p.email || '')
+}
+
+/* ---------- SUPER LIGHT DONUT (no chart.js) ---------- */
+function Donut({
+  label,
+  value,
+  max,
+}: {
+  label: string
+  value: number
+  max: number
+}) {
+  const pct = max > 0 ? Math.min(1, value / max) : 0
+  const deg = Math.round(pct * 360)
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-white/60">{label}</div>
+        <div className="text-xs text-white/60">{Math.round(pct * 100)}%</div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-4">
+        <div
+          className="h-14 w-14 rounded-full"
+          style={{
+            background: `conic-gradient(rgba(59,130,246,0.95) ${deg}deg, rgba(255,255,255,0.10) 0deg)`,
+          }}
+        />
+        <div className="text-lg font-extrabold">{money(value)}</div>
+      </div>
+    </div>
+  )
 }
 
 export default function DashboardPage() {
+  const [toast, setToast] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deals, setDeals] = useState<DealRow[]>([])
+
+  const [me, setMe] = useState<Profile | null>(null)
+  const [profileMap, setProfileMap] = useState<Map<string, Profile>>(new Map())
+
+  // date picker for the TOP 3 cards (specific day)
+  const [dayPick, setDayPick] = useState<string>(toISODate(new Date()))
+
+  // data
+  const [todayProd, setTodayProd] = useState(0)
+  const [weekProd, setWeekProd] = useState(0)
+  const [monthProd, setMonthProd] = useState(0)
+
+  const [writingAgents, setWritingAgents] = useState(0)
+  const [topCard, setTopCard] = useState<{ label: string; value: number }>({ label: '—', value: 0 })
+
+  const [donutA, setDonutA] = useState(0) // Production
+  const [donutB, setDonutB] = useState(0) // Writing Agents (as proxy)
+  const [donutC, setDonutC] = useState(0) // Deals submitted
+
+  const [top5, setTop5] = useState<Array<{ agent_id: string; name: string; total: number }>>([])
+
+  const [activity, setActivity] = useState<Array<{ id: string; created_at: string; agent: string; premium: number }>>([])
 
   useEffect(() => {
-    let alive = true
-
-    ;(async () => {
-      setLoading(true)
-
-      const { data: userRes } = await supabase.auth.getUser()
-      const user = userRes.user
-      if (!user) {
-        window.location.href = '/login'
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('deals')
-        .select('id,user_id,created_at,premium,company')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(500)
-
-      if (!alive) return
-
-      if (error) {
-        setDeals([])
-        setLoading(false)
-        return
-      }
-
-      setDeals((data as DealRow[]) || [])
-      setLoading(false)
-    })()
-
-    return () => {
-      alive = false
-    }
+    boot()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const now = new Date()
+  useEffect(() => {
+    if (!me) return
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, dayPick])
 
-  const parsed = useMemo(() => {
-    return deals.map(d => {
-      const dt = d.created_at ? new Date(d.created_at) : new Date()
-      const premiumNum =
-        typeof d.premium === 'number'
-          ? d.premium
-          : typeof d.premium === 'string'
-          ? Number(d.premium.replace(/[^0-9.]/g, ''))
-          : Number(d.premium || 0)
+  async function boot() {
+    setLoading(true)
+    const { data: userRes } = await supabase.auth.getUser()
+    const uid = userRes.user?.id
+    if (!uid) {
+      setLoading(false)
+      return
+    }
 
-      return {
-        ...d,
-        dt,
-        premiumNum: isNaN(premiumNum) ? 0 : premiumNum,
-        companySafe: (d.company || 'Other').trim() || 'Other',
-      }
-    })
-  }, [deals])
-
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const startOfWeek = (d: Date) => {
-    const day = d.getDay()
-    const diff = day === 0 ? -6 : 1 - day
-    const base = new Date(d)
-    base.setDate(d.getDate() + diff)
-    return startOfDay(base)
+    const { data: prof } = await supabase.from('profiles').select('id, first_name, last_name, email').eq('id', uid).single()
+    setMe((prof || null) as any)
+    await loadProfiles()
+    setLoading(false)
   }
-  const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1)
 
-  const todayStart = startOfDay(now)
-  const weekStart = startOfWeek(now)
-  const monthStart = startOfMonth(now)
+  async function loadProfiles() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .limit(5000)
 
-  const todayDeals = useMemo(() => parsed.filter(d => d.dt >= todayStart), [parsed, todayStart])
-  const weekDeals = useMemo(() => parsed.filter(d => d.dt >= weekStart), [parsed, weekStart])
-  const monthDeals = useMemo(() => parsed.filter(d => d.dt >= monthStart), [parsed, monthStart])
+    const map = new Map<string, Profile>()
+    ;(data || []).forEach((p: any) => map.set(p.id, p as Profile))
+    setProfileMap(map)
+  }
 
-  const teamTotal = useMemo(() => monthDeals.reduce((s, d) => s + d.premiumNum, 0), [monthDeals])
+  async function load() {
+    setLoading(true)
+    setToast(null)
 
-  const writingAgents = useMemo(() => {
-    const uniq = new Set(monthDeals.map(d => d.user_id))
-    return uniq.size
-  }, [monthDeals])
+    const picked = dayPick ? new Date(dayPick) : new Date()
+    const dayStart = startOfDayISO(picked)
+    const dayEnd = endOfDayISO(picked)
 
-  const topCarrier = useMemo(() => {
-    const map = new Map<string, number>()
-    monthDeals.forEach(d => map.set(d.companySafe, (map.get(d.companySafe) || 0) + 1))
-    let best = '—'
-    let bestCount = 0
-    for (const [k, v] of map.entries()) {
-      if (v > bestCount) {
-        best = k
-        bestCount = v
-      }
+    const weekStart = startOfWeekISO(new Date())
+    const monthStart = startOfMonthISO(new Date())
+
+    // deal pulls (keep light)
+    const [{ data: dayDeals, error: dayErr }, { data: weekDeals, error: weekErr }, { data: monthDeals, error: monthErr }] =
+      await Promise.all([
+        supabase.from('deals').select('id, created_at, agent_id, premium').gte('created_at', dayStart).lte('created_at', dayEnd),
+        supabase.from('deals').select('id, created_at, agent_id, premium').gte('created_at', weekStart),
+        supabase.from('deals').select('id, created_at, agent_id, premium').gte('created_at', monthStart),
+      ])
+
+    if (dayErr || weekErr || monthErr) {
+      setToast('Could not load dashboard data')
+      setLoading(false)
+      return
     }
-    return bestCount === 0 ? '—' : best
-  }, [monthDeals])
 
-  const last7 = useMemo(() => {
-    const days: { label: string; count: number }[] = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now)
-      d.setDate(now.getDate() - i)
-      const dStart = startOfDay(d)
-      const next = new Date(dStart)
-      next.setDate(dStart.getDate() + 1)
+    const sumPremium = (arr: any[]) =>
+      (arr || []).reduce((a, r) => a + (Number(r.premium || 0) || 0), 0)
 
-      const count = parsed.filter(x => x.dt >= dStart && x.dt < next).length
-      const label = d.toLocaleDateString(undefined, { weekday: 'short' })
-      days.push({ label, count })
-    }
-    return days
-  }, [parsed])
+    setTodayProd(sumPremium(dayDeals || []))
+    setWeekProd(sumPremium(weekDeals || []))
+    setMonthProd(sumPremium(monthDeals || []))
 
-  const lineLabels = useMemo(() => last7.map(x => x.label), [last7])
-  const lineValues = useMemo(() => last7.map(x => x.count), [last7])
+    // writing agents = unique agent_id who wrote in THIS WEEK (feel free to change to picked day later)
+    const weekAgentIds = Array.from(new Set((weekDeals || []).map((d: any) => d.agent_id).filter(Boolean)))
+    setWritingAgents(weekAgentIds.length)
 
-  const carrierDist = useMemo(() => {
-    const map = new Map<string, number>()
-    monthDeals.forEach(d => map.set(d.companySafe, (map.get(d.companySafe) || 0) + 1))
-    const entries = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6)
-    const labels = entries.length ? entries.map(e => e[0]) : ['No Data']
-    const values = entries.length ? entries.map(e => e[1]) : [100]
-    return { labels, values }
-  }, [monthDeals])
+    // top carrier -> now "deals submitted" (count for picked day)
+    const dealsSubmittedPickedDay = (dayDeals || []).length
 
-  const weeklyGoal = 20
-  const monthlyGoal = 90
+    // Production donut = this month production
+    setDonutA(sumPremium(monthDeals || []))
+    // Writing agents donut = count * 1000 just to have a visual scale without chart libs
+    setDonutB((weekAgentIds.length || 0) * 1000)
+    // Deals submitted donut = count * 500 just to visualize
+    setDonutC((dealsSubmittedPickedDay || 0) * 500)
+
+    // Top 5 leaderboard (this month) + ensure logged-in agent ALWAYS shown at top of right-side list
+    const monthAgg = new Map<string, number>()
+    ;(monthDeals || []).forEach((d: any) => {
+      const aId = d.agent_id
+      if (!aId) return
+      const p = Number(d.premium || 0) || 0
+      monthAgg.set(aId, (monthAgg.get(aId) || 0) + p)
+    })
+
+    const monthRows = Array.from(monthAgg.entries())
+      .map(([agent_id, total]) => ({
+        agent_id,
+        total,
+        name: nameFromProfile(profileMap.get(agent_id) || null) || 'Agent',
+      }))
+      .sort((a, b) => b.total - a.total)
+
+    const meId = (me as any)?.id
+    const meRow = meId
+      ? {
+          agent_id: meId,
+          total: monthAgg.get(meId) || 0,
+          name: nameFromProfile(profileMap.get(meId) || me) || 'Me',
+        }
+      : null
+
+    const top = monthRows.slice(0, 5)
+
+    // If me isn't already in top 5, show me first then show top 5 below (as requested)
+    const finalTop5 =
+      meRow && !top.some((x) => x.agent_id === meRow.agent_id) ? [meRow, ...top] : top
+
+    setTop5(finalTop5.slice(0, meRow ? 6 : 5))
+
+    // Top 3 cards (picked day)
+    setTopCard({ label: 'Deals Submitted', value: dealsSubmittedPickedDay })
+
+    // Recent activity (picked day) — show Agent Name + Premium + Time (by hour)
+    const recent = (dayDeals || [])
+      .slice()
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 8)
+      .map((d: any) => {
+        const agent = nameFromProfile(profileMap.get(d.agent_id || '') || null) || 'Agent'
+        return {
+          id: d.id,
+          created_at: d.created_at,
+          agent,
+          premium: Number(d.premium || 0) || 0,
+        }
+      })
+
+    setActivity(recent)
+
+    setLoading(false)
+  }
+
+  const welcomeName = useMemo(() => {
+    const n = nameFromProfile(me)
+    return n || 'Agent'
+  }, [me])
+
+  const pickedLabel = useMemo(() => {
+    const d = dayPick ? new Date(dayPick) : new Date()
+    return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' })
+  }, [dayPick])
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
 
-      <div className="ml-64">
-        <header className="px-10 pt-10 pb-6 flex items-center justify-between">
+      {toast && (
+        <div className="fixed top-5 right-5 z-50">
+          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+            <div className="text-sm font-semibold">{toast}</div>
+            <div className="mt-3 flex gap-2">
+              <button className={btnSoft} onClick={() => setToast(null)}>
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="ml-64 px-10 py-10">
+        {/* HEADER */}
+        <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-            <p className="text-sm text-white/60 mt-1">
-              Morning Flow snapshot — clean signal, no noise.
-            </p>
+            <p className="text-sm text-white/60 mt-1">Welcome Back {welcomeName}</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition">
-              Notifications
-            </button>
-            <a
-              href="/post-deal"
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold transition"
-            >
-              Post a Deal
-            </a>
+          <button onClick={load} className={btnGlass}>
+            Refresh
+          </button>
+        </div>
+
+        {/* TOP GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* CARD 1 */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 relative overflow-hidden">
+            <div className="absolute top-4 right-4 w-[240px]">
+              {/* small date picker */}
+              <FlowDatePicker value={dayPick} onChange={setDayPick} />
+            </div>
+
+            <div className="text-xs text-white/60">Production</div>
+            <div className="mt-3 text-4xl font-black tracking-tight">{money(todayProd)}</div>
+            <div className="mt-2 text-xs text-white/55">{pickedLabel}</div>
           </div>
-        </header>
 
-        <main className="px-10 pb-12">
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <MiniStat label="Team Total" value={loading ? '—' : `$${formatMoney(teamTotal)}`} />
-            <MiniStat label="Writing Agents" value={loading ? '—' : String(writingAgents)} />
-            <MiniStat label="Top Carrier" value={loading ? '—' : topCarrier} />
-          </section>
+          {/* CARD 2 */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <div className="text-xs text-white/60">Writing Agents ✅</div>
+            <div className="mt-3 text-4xl font-black tracking-tight">{writingAgents.toLocaleString()}</div>
+            <div className="mt-2 text-xs text-white/55">This week</div>
+          </div>
 
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 glass p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold">Flow Trend</h2>
-                <span className="text-xs text-white/60">Last 7 days</span>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <FlowLineChart labels={lineLabels} values={lineValues} />
-              </div>
-
-              <div className="mt-6">
-                <GoalDonuts
-                  weeklyCurrent={weekDeals.length}
-                  weeklyGoal={weeklyGoal}
-                  monthlyCurrent={monthDeals.length}
-                  monthlyGoal={monthlyGoal}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                <KPI title="Today" value={loading ? '—' : String(todayDeals.length)} sub="Deals submitted" />
-                <KPI title="This Week" value={loading ? '—' : String(weekDeals.length)} sub="Deals submitted" />
-                <KPI title="This Month" value={loading ? '—' : String(monthDeals.length)} sub="Deals submitted" />
-              </div>
-            </div>
-
-            <div className="glass p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold">Leaderboard</h2>
-                <span className="text-xs text-white/60">This month</span>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-5">
-                <CarrierDonut labels={carrierDist.labels} values={carrierDist.values} />
-              </div>
-
-              <div className="space-y-3">
-                <Leader rank={1} name="You" amount={loading ? '—' : `$${formatMoney(teamTotal)}`} highlight />
-              </div>
-
-              <div className="mt-4 text-xs text-white/50">Admin team leaderboard comes next.</div>
-            </div>
-          </section>
-
-          <section className="mt-6 glass p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold">Recent Activity</h2>
-              <span className="text-xs text-white/60">Latest submissions</span>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 overflow-hidden">
-              <Row head left="Carrier" mid="Premium" right="Time" />
-              {(loading ? [] : parsed.slice(0, 6)).map(d => (
-                <Row
-                  key={d.id}
-                  left={d.companySafe}
-                  mid={`$${formatMoney(d.premiumNum)}`}
-                  right={timeAgo(d.dt)}
-                />
-              ))}
-              {!loading && parsed.length === 0 && <Row left="—" mid="No deals yet" right="—" />}
-            </div>
-          </section>
-        </main>
-      </div>
-    </div>
-  )
-}
-
-function KPI({ title, value, sub }: { title: string; value: string; sub: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <p className="text-xs text-white/60">{title}</p>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-3xl font-semibold">{value}</span>
-        <span className="text-xs text-white/50">{sub}</span>
-      </div>
-    </div>
-  )
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="glass p-6">
-      <p className="text-sm text-white/60">{label}</p>
-      <p className="text-2xl font-semibold mt-1">{value}</p>
-    </div>
-  )
-}
-
-function Leader({
-  rank,
-  name,
-  amount,
-  highlight,
-}: {
-  rank: number
-  name: string
-  amount: string
-  highlight?: boolean
-}) {
-  return (
-    <div
-      className={`flex items-center justify-between rounded-2xl border border-white/10 px-4 py-3 ${
-        highlight ? 'bg-white/10' : 'bg-white/5'
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${highlight ? 'bg-blue-600' : 'bg-white/10'}`}>
-          {rank}
+          {/* CARD 3 */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <div className="text-xs text-white/60">Deals Submitted</div>
+            <div className="mt-3 text-4xl font-black tracking-tight">{topCard.value.toLocaleString()}</div>
+            <div className="mt-2 text-xs text-white/55">{pickedLabel}</div>
+          </div>
         </div>
-        <div>
-          <div className={`${highlight ? 'text-base font-semibold' : 'text-sm font-medium'}`}>{name}</div>
-          <div className="text-xs text-white/50">Monthly production</div>
+
+        {/* MAIN */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* LEFT 2 COLS */}
+          <div className="xl:col-span-2 space-y-6">
+            {/* FLOW TREND + DONUTS */}
+            <div className="glass rounded-2xl border border-white/10 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="text-sm font-semibold">Flow Trend</div>
+                  <div className="text-xs text-white/55 mt-1">Simple visual — fast & clean.</div>
+                </div>
+                <div className="text-xs text-white/55">{pickedLabel}</div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Donut label="Production" value={donutA} max={Math.max(donutA, donutB, donutC, 1)} />
+                <Donut label="Writing Agents ✅" value={donutB} max={Math.max(donutA, donutB, donutC, 1)} />
+                <Donut label="Deals Submitted" value={donutC} max={Math.max(donutA, donutB, donutC, 1)} />
+              </div>
+            </div>
+
+            {/* PRODUCTION (TODAY/WEEK/MONTH) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <div className="text-xs text-white/60">Today’s production</div>
+                <div className="mt-3 text-3xl font-black">{money(todayProd)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <div className="text-xs text-white/60">This weeks production</div>
+                <div className="mt-3 text-3xl font-black">{money(weekProd)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                <div className="text-xs text-white/60">This months production</div>
+                <div className="mt-3 text-3xl font-black">{money(monthProd)}</div>
+              </div>
+            </div>
+
+            {/* RECENT ACTIVITY */}
+            <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+              <div className="px-6 py-4 bg-white/5 flex items-center justify-between">
+                <div className="text-sm font-semibold">Recent Activity</div>
+                <div className="text-xs text-white/55">{pickedLabel}</div>
+              </div>
+
+              {loading ? (
+                <div className="px-6 py-10 text-center text-white/60">Loading…</div>
+              ) : activity.length === 0 ? (
+                <div className="px-6 py-10 text-center text-white/60">No activity.</div>
+              ) : (
+                <div className="divide-y divide-white/10">
+                  {activity.map((a) => (
+                    <div key={a.id} className="px-6 py-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold">{a.agent}</div>
+                        <div className="text-xs text-white/55 mt-1">{hourLabel(a.created_at)}</div>
+                      </div>
+                      <div className="text-sm font-extrabold">{money(a.premium)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT */}
+          <div className="space-y-6">
+            {/* LEADERBOARD PREVIEW */}
+            <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+              <div className="px-6 py-4 bg-white/5 flex items-center justify-between">
+                <div className="text-sm font-semibold">Leaderboard</div>
+
+                <Link
+                  href="/leaderboard"
+                  className="text-xs font-semibold text-white/70 hover:text-white transition"
+                >
+                  All results →
+                </Link>
+              </div>
+
+              <div className="px-6 py-4">
+                <div className="text-xs text-white/55 mb-3">Top 5</div>
+
+                {loading ? (
+                  <div className="py-6 text-center text-white/60 text-sm">Loading…</div>
+                ) : top5.length === 0 ? (
+                  <div className="py-6 text-center text-white/60 text-sm">No results.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {top5.map((r, i) => (
+                      <div
+                        key={r.agent_id + i}
+                        className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="text-xs text-white/55 w-6">{i + 1}</div>
+                          <div className="text-sm font-semibold">{r.name}</div>
+                        </div>
+                        <div className="text-sm font-extrabold">{money(r.total)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* QUICK NOTE */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <div className="text-sm font-semibold">Morning Flow Snapshot</div>
+              <div className="text-xs text-white/55 mt-2">
+                Clean signal, no noise.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div className={`${highlight ? 'text-lg font-semibold' : 'text-sm font-semibold'} text-green-400`}>
-        {amount}
-      </div>
     </div>
   )
 }
 
-function Row({
-  head,
-  left,
-  mid,
-  right,
-}: {
-  head?: boolean
-  left: string
-  mid: string
-  right: string
-}) {
-  return (
-    <div className={`grid grid-cols-3 px-4 py-3 border-b border-white/10 ${head ? 'text-xs text-white/60 bg-white/5' : 'text-sm'}`}>
-      <div>{left}</div>
-      <div className="text-center">{mid}</div>
-      <div className="text-right">{right}</div>
-    </div>
-  )
-}
-
-function formatMoney(n: number) {
-  return Math.round(n).toLocaleString()
-}
-
-function timeAgo(d: Date) {
-  const diff = Date.now() - d.getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'now'
-  if (mins < 60) return `${mins}m`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h`
-  const days = Math.floor(hrs / 24)
-  return `${days}d`
-}
+const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnGlass =
+  'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-3 text-sm font-semibold'
