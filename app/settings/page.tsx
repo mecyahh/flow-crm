@@ -220,16 +220,16 @@ export default function SettingsPage() {
     boot()
   }
 
-  async function saveTheme() {
+    async function saveTheme() {
     if (!me) return
-    const role = (me.role || '').toLowerCase()
-    const isAllowed = !!me.is_agency_owner || role === 'admin'
-    if (!isAllowed) return setToast('Only agency owners can change theme')
+    if (!me.is_agency_owner && me.role !== 'admin') return setToast('Only agency owners can change theme')
 
     const { error } = await supabase.from('profiles').update({ theme: themePick }).eq('id', me.id)
     if (error) return setToast('Save failed')
+
     setToast('Theme saved ✅')
-    boot()
+    // hard refresh so theme applies instantly everywhere
+    window.location.reload()
   }
 
   async function logout() {
