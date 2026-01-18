@@ -18,21 +18,12 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 p-6 bg-[#070a12]/90 border-r border-white/10 backdrop-blur-xl">
-      {/* Brand */}
+    <aside className="fixed left-0 top-0 h-screen w-64 p-6 bg-[#070a12] border-r border-white/10">
       <div className="mb-8">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center">
-            <span className="text-sm font-semibold">F</span>
-          </div>
-          <div className="min-w-0">
-            <div className="text-lg font-semibold tracking-tight leading-tight">Flow</div>
-            <div className="text-xs text-white/50 mt-0.5">Deal tracking</div>
-          </div>
-        </div>
+        <div className="text-xl font-semibold tracking-tight">Flow</div>
+        <div className="text-xs text-white/50 mt-1">Deal tracking</div>
       </div>
 
-      {/* Nav */}
       <nav className="flex flex-col gap-2">
         {NAV.map((item) => {
           const active = pathname === item.href
@@ -41,33 +32,28 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={[
-                'group rounded-2xl px-4 py-3 text-sm transition border flex items-center justify-between',
+                'rounded-xl px-4 py-3 text-sm transition border flex items-center justify-between',
                 active
                   ? 'bg-white/10 border-white/15'
                   : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10',
               ].join(' ')}
             >
-              <span className="text-white/90 group-hover:text-white transition">{item.label}</span>
-              <span
-                className={[
-                  'text-xs transition',
-                  active ? 'text-white/60' : 'text-white/25 group-hover:text-white/45',
-                ].join(' ')}
-              >
-                →
-              </span>
+              <span>{item.label}</span>
+              {active ? (
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{
+                    background: 'var(--accent)',
+                    boxShadow: '0 0 18px var(--glow)',
+                  }}
+                />
+              ) : null}
             </Link>
           )
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="absolute bottom-6 left-6 right-6">
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-          <div className="text-xs text-white/60 font-semibold">Flow</div>
-          <div className="text-[11px] text-white/40 mt-0.5">v1</div>
-        </div>
-      </div>
+      <div className="absolute bottom-6 left-6 right-6 text-xs text-white/40">v1</div>
     </aside>
   )
 }
