@@ -1,4 +1,4 @@
-// ✅ REPLACE ENTIRE FILE: /app/dashboard/page.tsx
+export const dynamic = 'force-dynamic'
 
 'use client'
 
