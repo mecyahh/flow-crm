@@ -1,6 +1,6 @@
 // ✅ FILE: /app/leaderboard/page.tsx  (REPLACE ENTIRE FILE)
-// Crash-safe global leaderboard: everyone sees agency leaderboard.
-// (Uses profiles to display names instead of emails)
+// Keeps podium exactly the same (green premiums), adds weekly calendar columns with daily premium per agent.
+// If no data => bold red 0. Sundays => "--"
 
 'use client'
 
@@ -37,7 +37,6 @@ export default function LeaderboardPage() {
         setErr(null)
         setLoading(true)
 
-        // ensure logged in (prevents "Auth session missing!" crashes)
         const { data: userRes, error: userErr } = await supabase.auth.getUser()
         if (userErr) throw new Error(`auth.getUser: ${userErr.message}`)
         if (!userRes.user) {
@@ -45,21 +44,17 @@ export default function LeaderboardPage() {
           return
         }
 
-        // load profiles for names
         const { data: profs, error: pErr } = await supabase
           .from('profiles')
           .select('id,first_name,last_name,email')
           .limit(10000)
-
         if (pErr) throw new Error(`profiles: ${pErr.message}`)
 
-        // global deals (agency leaderboard)
         const { data: ds, error: dErr } = await supabase
           .from('deals')
           .select('id,user_id,created_at,premium')
           .order('created_at', { ascending: false })
-          .limit(5000)
-
+          .limit(8000)
         if (dErr) throw new Error(`deals: ${dErr.message}`)
 
         if (!alive) return
@@ -78,6 +73,15 @@ export default function LeaderboardPage() {
     }
   }, [])
 
+  const nameById = useMemo(() => {
+    const m = new Map<string, string>()
+    profiles.forEach((p) => {
+      const n = `${p.first_name || ''} ${p.last_name || ''}`.trim()
+      m.set(p.id, n || p.email || 'Agent')
+    })
+    return m
+  }, [profiles])
+
   const parsedDeals = useMemo(() => {
     return (deals || []).map((d) => {
       const dt = d.created_at ? new Date(d.created_at) : new Date()
@@ -92,36 +96,78 @@ export default function LeaderboardPage() {
         ...d,
         dt,
         premiumNum: Number.isFinite(premiumNum) ? premiumNum : 0,
+        dateKey: toISODateLocal(dt),
       }
     })
   }, [deals])
 
+  // monthly leaderboard totals (sorting + total column)
   const monthStart = useMemo(() => {
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), 1)
   }, [])
 
-  const monthDeals = useMemo(() => parsedDeals.filter((d) => d.dt >= monthStart), [parsedDeals, monthStart])
+  const monthDeals = useMemo(
+    () => parsedDeals.filter((d) => d.dt >= monthStart),
+    [parsedDeals, monthStart]
+  )
 
-  const nameById = useMemo(() => {
-    const m = new Map<string, string>()
-    profiles.forEach((p) => {
-      const n = `${p.first_name || ''} ${p.last_name || ''}`.trim()
-      m.set(p.id, n || p.email || 'Agent')
+  const monthTotals = useMemo(() => {
+    const totals = new Map<string, number>()
+    monthDeals.forEach((d) =>
+      totals.set(d.user_id, (totals.get(d.user_id) || 0) + d.premiumNum)
+    )
+    return totals
+  }, [monthDeals])
+
+  // last 7 calendar dates (M/D) columns
+  const last7Days = useMemo(() => {
+    const out: { date: Date; key: string; label: string; isSunday: boolean }[] = []
+    const now = new Date()
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setHours(0, 0, 0, 0)
+      d.setDate(d.getDate() - i)
+      out.push({
+        date: d,
+        key: toISODateLocal(d),
+        label: `${d.getMonth() + 1}/${d.getDate()}`,
+        isSunday: d.getDay() === 0,
+      })
+    }
+    return out
+  }, [])
+
+  // daily premiums per user_id per dateKey (local date)
+  const dailyPremiumByUser = useMemo(() => {
+    const map = new Map<string, Map<string, number>>() // user -> (dateKey -> sum)
+    // Use ALL parsedDeals so the daily columns show even if month boundary is crossed
+    // (you asked for the calendar week display)
+    parsedDeals.forEach((d) => {
+      // only accumulate for the last7 window keys to keep it tight
+      // (quick filter)
+      // We'll still compute and only read those keys; this is safe.
+      const u = d.user_id
+      const dk = d.dateKey
+      if (!map.has(u)) map.set(u, new Map<string, number>())
+      const inner = map.get(u)!
+      inner.set(dk, (inner.get(dk) || 0) + d.premiumNum)
     })
-    return m
-  }, [profiles])
+    return map
+  }, [parsedDeals])
 
   const leaderboard = useMemo(() => {
-    const totals = new Map<string, number>()
-    monthDeals.forEach((d) => totals.set(d.user_id, (totals.get(d.user_id) || 0) + d.premiumNum))
-    return Array.from(totals.entries())
-      .map(([user_id, total]) => ({ user_id, name: nameById.get(user_id) || 'Agent', total }))
-      .sort((a, b) => b.total - a.total)
-  }, [monthDeals, nameById])
+    const rows = Array.from(monthTotals.entries()).map(([user_id, total]) => ({
+      user_id,
+      name: nameById.get(user_id) || 'Agent',
+      total,
+    }))
+    rows.sort((a, b) => b.total - a.total)
+    return rows
+  }, [monthTotals, nameById])
 
   const top3 = leaderboard.slice(0, 3)
-  const rest = leaderboard // include top3 in table too
+  const rest = leaderboard
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
@@ -131,7 +177,7 @@ export default function LeaderboardPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
-            <p className="text-sm text-white/60 mt-1">Agency-wide monthly production.</p>
+            <p className="text-sm text-white/60 mt-1">Agency-wide monthly production + weekly consistency.</p>
           </div>
 
           <button
@@ -149,14 +195,14 @@ export default function LeaderboardPage() {
           </div>
         )}
 
-        {/* TOP 3 PODIUM */}
+        {/* TOP 3 PODIUM (UNCHANGED) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <PodiumCard rank={2} data={top3[1]} />
           <PodiumCard rank={1} data={top3[0]} spotlight />
           <PodiumCard rank={3} data={top3[2]} />
         </div>
 
-        {/* FULL TABLE */}
+        {/* FULL TABLE WITH WEEKLY CALENDAR COLUMNS */}
         <div className="glass rounded-2xl border border-white/10 overflow-hidden">
           <div className="px-6 py-4 bg-white/5 flex items-center justify-between">
             <div className="text-sm font-semibold">All Agents</div>
@@ -167,32 +213,69 @@ export default function LeaderboardPage() {
             <table className="w-full text-sm">
               <thead className="text-[11px] text-white/55">
                 <tr className="border-b border-white/10">
-                  <th className="text-left px-6 py-3">Rank</th>
-                  <th className="text-left px-6 py-3">Agent</th>
-                  <th className="text-right px-6 py-3">Premium</th>
+                  <th className="text-left px-6 py-3 whitespace-nowrap">Rank</th>
+                  <th className="text-left px-6 py-3 whitespace-nowrap">Agent</th>
+
+                  {last7Days.map((d) => (
+                    <th key={d.key} className="text-center px-4 py-3 whitespace-nowrap">
+                      {d.label}
+                    </th>
+                  ))}
+
+                  <th className="text-right px-6 py-3 whitespace-nowrap">Total</th>
                 </tr>
               </thead>
+
               <tbody>
                 {!loading &&
-                  rest.map((r, i) => (
-                    <tr key={r.user_id} className="border-b border-white/10 hover:bg-white/5 transition">
-                      <td className="px-6 py-4 font-semibold">{i + 1}</td>
-                      <td className="px-6 py-4">{r.name}</td>
-                      <td className="px-6 py-4 text-right font-semibold text-green-300">
-                        ${formatMoney(r.total)}
-                      </td>
-                    </tr>
-                  ))}
+                  rest.map((r, i) => {
+                    const daily = dailyPremiumByUser.get(r.user_id) || new Map<string, number>()
+                    return (
+                      <tr key={r.user_id} className="border-b border-white/10 hover:bg-white/5 transition">
+                        <td className="px-6 py-4 font-semibold whitespace-nowrap">{i + 1}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">{r.name}</td>
+
+                        {last7Days.map((d) => {
+                          if (d.isSunday) {
+                            return (
+                              <td key={d.key} className="px-4 py-4 text-center text-white/40 font-semibold whitespace-nowrap">
+                                --
+                              </td>
+                            )
+                          }
+                          const v = daily.get(d.key) || 0
+                          if (v <= 0) {
+                            return (
+                              <td key={d.key} className="px-4 py-4 text-center font-extrabold text-red-300 whitespace-nowrap">
+                                0
+                              </td>
+                            )
+                          }
+                          return (
+                            <td key={d.key} className="px-4 py-4 text-center font-semibold text-green-300 whitespace-nowrap">
+                              ${formatMoney(v)}
+                            </td>
+                          )
+                        })}
+
+                        <td className="px-6 py-4 text-right font-semibold text-green-300 whitespace-nowrap">
+                          ${formatMoney(r.total)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+
                 {!loading && rest.length === 0 && (
                   <tr>
-                    <td className="px-6 py-6 text-white/60" colSpan={3}>
+                    <td className="px-6 py-6 text-white/60" colSpan={3 + last7Days.length}>
                       No data yet.
                     </td>
                   </tr>
                 )}
+
                 {loading && (
                   <tr>
-                    <td className="px-6 py-6 text-white/60" colSpan={3}>
+                    <td className="px-6 py-6 text-white/60" colSpan={3 + last7Days.length}>
                       Loading…
                     </td>
                   </tr>
@@ -203,12 +286,14 @@ export default function LeaderboardPage() {
         </div>
 
         <div className="mt-3 text-[11px] text-white/45">
-          Note: if totals look wrong, it’s usually premium parsing or missing RLS access for some rows.
+          Sundays show “--”. All other days: 0 = bold red, production = green.
         </div>
       </div>
     </div>
   )
 }
+
+/* ---------- Components ---------- */
 
 function PodiumCard({
   rank,
@@ -243,7 +328,13 @@ function PodiumCard({
         </div>
 
         <div className="mt-4 text-xs text-white/60">Premium</div>
-        <div className={spotlight ? 'mt-1 text-3xl font-extrabold text-green-300' : 'mt-1 text-2xl font-bold text-green-300'}>
+        <div
+          className={
+            spotlight
+              ? 'mt-1 text-3xl font-extrabold text-green-300'
+              : 'mt-1 text-2xl font-bold text-green-300'
+          }
+        >
           {data ? `$${formatMoney(data.total)}` : '—'}
         </div>
       </div>
@@ -251,7 +342,17 @@ function PodiumCard({
   )
 }
 
+/* ---------- Helpers ---------- */
+
 function formatMoney(n: number) {
   const num = Number(n || 0)
   return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
+function toISODateLocal(d: Date) {
+  const dt = new Date(d)
+  const y = dt.getFullYear()
+  const m = String(dt.getMonth() + 1).padStart(2, '0')
+  const day = String(dt.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
