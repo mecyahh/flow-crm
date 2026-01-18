@@ -1,112 +1,150 @@
 // ✅ FILE: /app/api/webhooks/deal-posted/route.ts  (CREATE THIS FILE)
-// Sends Discord webhook when a deal is posted.
-// Webhook URL is stored ONLY in Supabase (not exposed). We resolve it up the upline chain.
-
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { createClient } from '@supabase/supabase-js'
 
-function supabaseFromAuth(req: Request) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  const authHeader = req.headers.get('authorization') || ''
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-  return {
-    token,
-    sb: createClient(url, anon, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-    }),
-  }
+export const dynamic = 'force-dynamic'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+// Put your Discord webhook in Vercel env vars:
+// DISCORD_WEBHOOK_URL = https://discord.com/api/webhooks/...
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL!
+
+function jsonError(msg: string, code = 400) {
+  return NextResponse.json({ error: msg }, { status: code })
 }
 
-// Walk up upline chain until we find a webhook url
-async function resolveWebhookUrl(startUserId: string) {
-  // NOTE: requires profiles.discord_webhook_url column (text). If you named it differently, change here.
-  let cur: string | null = startUserId
-  const seen = new Set<string>()
+function startOfWeekMon(d: Date) {
+  const x = new Date(d)
+  const day = x.getDay() // Sun=0
+  const diff = day === 0 ? -6 : 1 - day
+  x.setDate(x.getDate() + diff)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
 
-  while (cur && !seen.has(cur)) {
-    seen.add(cur)
+function toISO(d: Date) {
+  return d.toISOString()
+}
 
-    const { data: p } = await supabaseAdmin
-      .from('profiles')
-      .select('id,upline_id,discord_webhook_url')
-      .eq('id', cur)
-      .single()
+function fmtMoney(n: number) {
+  const v = Math.round(n)
+  return v.toLocaleString()
+}
 
-    const url = (p as any)?.discord_webhook_url as string | null
-    if (url && url.startsWith('http')) return url
-
-    cur = ((p as any)?.upline_id as string | null) || null
-  }
-
-  return null
+function annualize(premium: number) {
+  // If you're storing MONTHLY premium, this is correct.
+  // If you're storing ANNUAL premium already, change this to: return premium
+  return premium * 12
 }
 
 export async function POST(req: Request) {
   try {
-    const { token, sb } = supabaseFromAuth(req)
-    if (!token) return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
+    if (!DISCORD_WEBHOOK_URL) return jsonError('Missing DISCORD_WEBHOOK_URL', 500)
 
-    const { data: userRes, error: userErr } = await sb.auth.getUser()
-    if (userErr) return NextResponse.json({ error: userErr.message }, { status: 401 })
-    const uid = userRes.user?.id
-    if (!uid) return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
+    const auth = req.headers.get('authorization') || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+    if (!token) return jsonError('Unauthorized', 401)
 
-    const body = await req.json().catch(() => ({}))
-    const dealId = String(body?.deal_id || '').trim()
-    if (!dealId) return NextResponse.json({ error: 'Missing deal_id' }, { status: 400 })
+    const { deal_id } = await req.json()
+    if (!deal_id) return jsonError('Missing deal_id')
 
-    // Load deal (service role)
-    const { data: deal, error: dErr } = await supabaseAdmin
+    // Verify the caller is logged in (agent token)
+    const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
+    const { data: userRes, error: userErr } = await supaUser.auth.getUser()
+    if (userErr || !userRes.user) return jsonError('Unauthorized', 401)
+
+    // Use service role to read everything needed + compute rank
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE)
+
+    // Load deal
+    const { data: deal, error: dealErr } = await admin
       .from('deals')
-      .select('id,agent_id,full_name,phone,company,premium,coverage,policy_number,created_at')
-      .eq('id', dealId)
+      .select('id, agent_id, company, premium, policy_number, created_at')
+      .eq('id', deal_id)
       .single()
 
-    if (dErr || !deal) return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
-    if ((deal as any).agent_id !== uid) {
-      // Agents can only trigger webhook for their own inserted deal
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    if (dealErr || !deal) return jsonError('Deal not found', 404)
 
-    const webhookUrl = await resolveWebhookUrl(uid)
-    if (!webhookUrl) return NextResponse.json({ ok: true, skipped: true }) // no webhook set
+    // Load agent profile name
+    const { data: prof } = await admin
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .eq('id', deal.agent_id)
+      .single()
 
-    const premium = Number((deal as any).premium || 0)
-    const coverage = Number((deal as any).coverage || 0)
-    const company = String((deal as any).company || '—')
-    const name = String((deal as any).full_name || '—')
+    const name =
+      `${(prof?.first_name || '').trim()} ${(prof?.last_name || '').trim()}`.trim() ||
+      (prof?.email || 'Agent')
 
-    // Discord webhook payload
-    const payload = {
-      content: null,
-      embeds: [
-        {
-          title: 'New Deal Posted ✅',
-          description: `**${name}** • ${company}`,
-          fields: [
-            { name: 'Premium', value: `$${premium.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, inline: true },
-            { name: 'Coverage', value: coverage ? `$${coverage.toLocaleString()}` : '—', inline: true },
-            { name: 'Policy #', value: String((deal as any).policy_number || '—'), inline: true },
-            { name: 'Phone', value: String((deal as any).phone || '—'), inline: true },
-          ],
-          timestamp: new Date((deal as any).created_at || Date.now()).toISOString(),
-        },
-      ],
-    }
+    const company = (deal.company || '—').trim()
+    const product = (deal.policy_number || '—').trim() // ← replace with deal.product if you add a product column later
 
-    const r = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    const premiumNum =
+      typeof deal.premium === 'number'
+        ? deal.premium
+        : typeof deal.premium === 'string'
+        ? Number(deal.premium.replace(/[^0-9.]/g, ''))
+        : Number(deal.premium || 0)
+
+    const ap = annualize(Number.isFinite(premiumNum) ? premiumNum : 0)
+
+    // Compute weekly rank by Annual Premium (Mon-Sun)
+    const now = new Date()
+    const weekStart = startOfWeekMon(now)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekEnd.getDate() + 7)
+
+    const { data: weekDeals } = await admin
+      .from('deals')
+      .select('agent_id, premium, created_at')
+      .gte('created_at', toISO(weekStart))
+      .lt('created_at', toISO(weekEnd))
+      .limit(50000)
+
+    const sums = new Map<string, number>()
+    ;(weekDeals || []).forEach((d: any) => {
+      const p =
+        typeof d.premium === 'number'
+          ? d.premium
+          : typeof d.premium === 'string'
+          ? Number(String(d.premium).replace(/[^0-9.]/g, ''))
+          : Number(d.premium || 0)
+      const apv = annualize(Number.isFinite(p) ? p : 0)
+      sums.set(d.agent_id, (sums.get(d.agent_id) || 0) + apv)
     })
 
-    if (!r.ok) return NextResponse.json({ error: 'Discord webhook failed' }, { status: 502 })
+    const sorted = Array.from(sums.entries()).sort((a, b) => b[1] - a[1])
+    const rank = Math.max(1, sorted.findIndex(([aid]) => aid === deal.agent_id) + 1)
+
+    const lines = [
+      `**User Name:** ${name}`,
+      `**Company:** ${company}`,
+      `**Product:** ${product}`,
+      `**AP:** $${fmtMoney(ap)}`,
+      `**Leaderboard Standing (week):** ${rank}${ordinal(rank)} Place`,
+    ]
+
+    await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: lines.join('\n'),
+      }),
+    })
 
     return NextResponse.json({ ok: true })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 })
+  } catch {
+    return NextResponse.json({ ok: true }) // best-effort; never break agent submit
   }
+}
+
+function ordinal(n: number) {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return s[(v - 20) % 10] || s[v] || s[0]
 }
