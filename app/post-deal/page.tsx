@@ -1,4 +1,7 @@
+// ✅ /app/post-deal/page.tsx (REPLACE ENTIRE FILE)
 'use client'
+
+export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -8,7 +11,7 @@ import FlowDatePicker from '@/app/components/FlowDatePicker'
 
 type CarrierRow = {
   id: string
-  custom_name: string | null
+  name: string
   supported_name: string | null
   advance_rate: number | null
 }
@@ -16,15 +19,19 @@ type CarrierRow = {
 type ProductRow = {
   id: string
   carrier_id: string
-  name: string
+  product_name: string
+  sort_order: number | null
+  is_active: boolean | null
 }
 
-type CarrierOption = {
-  id: string
-  label: string
-  supported_name: string
-  products: { id: string; name: string }[]
-}
+const RELATIONSHIP = [
+  'Spouse',
+  'Child',
+  'Parent',
+  'Sibling',
+  'Other',
+  'Estate', // ✅ added
+] as const
 
 export default function PostDealPage() {
   const router = useRouter()
@@ -32,29 +39,21 @@ export default function PostDealPage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
 
-  // carriers/products
-  const [carriers, setCarriers] = useState<CarrierOption[]>([])
-  const [carrierId, setCarrierId] = useState('')
-  const [productId, setProductId] = useState('')
+  const [carriers, setCarriers] = useState<CarrierRow[]>([])
+  const [products, setProducts] = useState<ProductRow[]>([])
 
   // form
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [dob, setDob] = useState('')
+  const [effectiveDate, setEffectiveDate] = useState('')
+  const [carrierId, setCarrierId] = useState('')
+  const [productName, setProductName] = useState('')
   const [policyNumber, setPolicyNumber] = useState('')
-  const [coverage, setCoverage] = useState('') // string for formatting
-  const [premium, setPremium] = useState('') // string for formatting
-  const [note, setNote] = useState('')
-
-  const selectedCarrier = useMemo(
-    () => carriers.find((c) => c.id === carrierId) || null,
-    [carriers, carrierId]
-  )
-
-  const productOptions = useMemo(() => {
-    if (!selectedCarrier) return []
-    return selectedCarrier.products
-  }, [selectedCarrier])
+  const [coverage, setCoverage] = useState('')
+  const [premium, setPremium] = useState('')
+  const [relationship, setRelationship] = useState<(typeof RELATIONSHIP)[number]>('Other')
+  const [notes, setNotes] = useState('')
 
   useEffect(() => {
     boot()
@@ -64,59 +63,59 @@ export default function PostDealPage() {
   async function boot() {
     setLoading(true)
 
-    // ensure auth
     const { data: userRes } = await supabase.auth.getUser()
-    const user = userRes.user
-    if (!user) {
-      window.location.href = '/login'
+    if (!userRes.user) {
+      router.push('/login')
       return
     }
 
-    // load carriers + products (from Settings tables)
-    // carriers
+    // load carriers
     const { data: cData, error: cErr } = await supabase
       .from('carriers')
-      .select('id, custom_name, supported_name, advance_rate')
-      .order('custom_name', { ascending: true })
-      .limit(500)
+      .select('id,name,supported_name,advance_rate')
+      .order('name', { ascending: true })
 
     if (cErr) {
-      setToast('Could not load carriers (RLS?)')
+      setToast('Could not load carriers')
       setLoading(false)
       return
     }
+    setCarriers((cData || []) as CarrierRow[])
 
-    const carriersList = (cData || []) as CarrierRow[]
-    const carrierIds = carriersList.map((c) => c.id)
-
-    // products
+    // load products
     const { data: pData, error: pErr } = await supabase
       .from('carrier_products')
-      .select('id, carrier_id, name')
-      .in('carrier_id', carrierIds.length ? carrierIds : ['00000000-0000-0000-0000-000000000000'])
-      .order('name', { ascending: true })
-      .limit(2000)
+      .select('id,carrier_id,product_name,sort_order,is_active')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('product_name', { ascending: true })
 
     if (pErr) {
-      setToast('Could not load products (RLS?)')
+      setToast('Could not load products')
       setLoading(false)
       return
     }
+    setProducts((pData || []) as ProductRow[])
 
-    const productsList = (pData || []) as ProductRow[]
-
-    const options: CarrierOption[] = carriersList.map((c) => {
-      const label = (c.custom_name || c.supported_name || 'Carrier').trim()
-      const supported = (c.supported_name || c.custom_name || label).trim()
-      const products = productsList
-        .filter((p) => p.carrier_id === c.id)
-        .map((p) => ({ id: p.id, name: p.name }))
-
-      return { id: c.id, label, supported_name: supported, products }
-    })
-
-    setCarriers(options)
     setLoading(false)
+  }
+
+  const productsForCarrier = useMemo(() => {
+    if (!carrierId) return []
+    return products.filter((p) => p.carrier_id === carrierId)
+  }, [products, carrierId])
+
+  useEffect(() => {
+    // reset product if carrier changes
+    setProductName('')
+  }, [carrierId])
+
+  function onPhoneChange(v: string) {
+    setPhone(formatPhoneLive(v))
+  }
+
+  function onMoneyChange(v: string, setter: (s: string) => void) {
+    setter(formatMoneyLive(v))
   }
 
   async function fireDiscordWebhook(dealId: string) {
@@ -135,41 +134,35 @@ export default function PostDealPage() {
     try {
       setToast(null)
 
-      const { data: userRes, error: userErr } = await supabase.auth.getUser()
-      if (userErr) throw new Error(userErr.message)
+      const { data: userRes } = await supabase.auth.getUser()
       const user = userRes.user
       if (!user) {
-        window.location.href = '/login'
+        router.push('/login')
         return
       }
 
-      // validations
-      if (!fullName.trim()) return setToast('Full Name is required')
-      if (!carrierId) return setToast('Select a Company')
-      if (!productId) return setToast('Select a Product')
-      if (!dob) return setToast('DOB is required')
+      if (!fullName.trim()) return setToast('Full name required')
+      if (!carrierId) return setToast('Select a company')
+      if (!productName) return setToast('Select a product')
 
-      const covNum = toMoneyNumber(coverage)
-      const premNum = toMoneyNumber(premium)
+      const carrier = carriers.find((c) => c.id === carrierId)
 
-      if (!covNum || covNum <= 0) return setToast('Coverage is required')
-      if (!premNum || premNum <= 0) return setToast('Premium is required')
-
-      const carrier = selectedCarrier
-      const product = productOptions.find((p) => p.id === productId)
-
-      // insert
-      const payload = {
+      const payload: any = {
         agent_id: user.id,
         full_name: fullName.trim(),
-        phone: cleanPhone(phone),
-        dob,
-        company: carrier?.label || null,
+        phone: normalizePhone(phone),
+        dob: dob || null,
+        effective_date: effectiveDate || null,
+        carrier_id: carrierId,
+        company: carrier?.name || null,
+        product: productName || null,
         policy_number: policyNumber.trim() || null,
-        coverage: covNum,
-        premium: premNum,
-        product: product?.name || null,
-        note: note.trim() || null,
+        coverage: moneyToNumber(coverage),
+        premium: moneyToNumber(premium),
+        relationship: relationship || null,
+        notes: notes.trim() || null,
+        note: notes.trim() || null, // keep compatibility with your Deal House note/notes
+        status: 'pending',
       }
 
       const { data: inserted, error } = await supabase
@@ -178,12 +171,15 @@ export default function PostDealPage() {
         .select('id')
         .single()
 
-      if (error) throw new Error(error.message)
+      if (error) {
+        setToast(error.message || 'Submit failed')
+        return
+      }
 
-      // webhook
+      // ✅ Discord webhook fire
       if (inserted?.id) fireDiscordWebhook(inserted.id)
 
-      // route to dashboard (refreshed)
+      // ✅ Route back to dashboard and refresh
       router.push('/dashboard')
       router.refresh()
     } catch (e: any) {
@@ -212,17 +208,17 @@ export default function PostDealPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Post a Deal</h1>
-            <p className="text-sm text-white/60 mt-1">Fast. Clean. Glass. No double-entry.</p>
+            <p className="text-sm text-white/60 mt-1">Modern glass form. Carrier → Product → Submit.</p>
           </div>
 
-          <button onClick={() => router.push('/dashboard')} className={btnGlass}>
-            Back to Dashboard
+          <button onClick={boot} className={btnGlass}>
+            Refresh
           </button>
         </div>
 
         <div className="glass rounded-2xl border border-white/10 p-6">
           {loading ? (
-            <div className="py-10 text-center text-white/60">Loading…</div>
+            <div className="px-6 py-10 text-center text-white/60">Loading…</div>
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -230,11 +226,11 @@ export default function PostDealPage() {
                   <input className={inputCls} value={fullName} onChange={(e) => setFullName(e.target.value)} />
                 </Field>
 
-                <Field label="Phone">
+                <Field label="Phone Number">
                   <input
                     className={inputCls}
                     value={phone}
-                    onChange={(e) => setPhone(formatPhoneLive(e.target.value))}
+                    onChange={(e) => onPhoneChange(e.target.value)}
                     placeholder="(888) 888-8888"
                   />
                 </Field>
@@ -243,20 +239,16 @@ export default function PostDealPage() {
                   <FlowDatePicker value={dob} onChange={setDob} placeholder="Select DOB" />
                 </Field>
 
+                <Field label="Effective Date">
+                  <FlowDatePicker value={effectiveDate} onChange={setEffectiveDate} placeholder="Select effective date" />
+                </Field>
+
                 <Field label="Company">
-                  <select
-                    className={inputCls}
-                    value={carrierId}
-                    onChange={(e) => {
-                      const id = e.target.value
-                      setCarrierId(id)
-                      setProductId('') // reset product when carrier changes
-                    }}
-                  >
+                  <select className={inputCls} value={carrierId} onChange={(e) => setCarrierId(e.target.value)}>
                     <option value="">Select…</option>
                     {carriers.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.label}
+                        {c.name}
                       </option>
                     ))}
                   </select>
@@ -264,31 +256,32 @@ export default function PostDealPage() {
 
                 <Field label="Product">
                   <select
-                    className={[inputCls, !carrierId ? 'opacity-50 cursor-not-allowed' : ''].join(' ')}
-                    value={productId}
+                    className={[
+                      inputCls,
+                      !carrierId ? 'opacity-50 cursor-not-allowed' : '',
+                    ].join(' ')}
                     disabled={!carrierId}
-                    onChange={(e) => setProductId(e.target.value)}
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
                   >
-                    <option value="">{carrierId ? 'Select…' : 'Select a carrier first…'}</option>
-                    {productOptions.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
+                    <option value="">{carrierId ? 'Select…' : 'Select carrier first…'}</option>
+                    {productsForCarrier.map((p) => (
+                      <option key={p.id} value={p.product_name}>
+                        {p.product_name}
                       </option>
                     ))}
                   </select>
                 </Field>
 
-                <Field label="Policy #">
+                <Field label="Policy Number">
                   <input className={inputCls} value={policyNumber} onChange={(e) => setPolicyNumber(e.target.value)} />
                 </Field>
 
                 <Field label="Coverage">
                   <input
                     className={inputCls}
-                    inputMode="decimal"
                     value={coverage}
-                    onChange={(e) => setCoverage(sanitizeMoneyLive(e.target.value))}
-                    onBlur={() => setCoverage(formatMoneyString(coverage))}
+                    onChange={(e) => onMoneyChange(e.target.value, setCoverage)}
                     placeholder="100,000.00"
                   />
                 </Field>
@@ -296,22 +289,28 @@ export default function PostDealPage() {
                 <Field label="Premium">
                   <input
                     className={inputCls}
-                    inputMode="decimal"
                     value={premium}
-                    onChange={(e) => setPremium(sanitizeMoneyLive(e.target.value))}
-                    onBlur={() => setPremium(formatMoneyString(premium))}
-                    placeholder="250.00"
+                    onChange={(e) => onMoneyChange(e.target.value, setPremium)}
+                    placeholder="1,200.00"
                   />
                 </Field>
-              </div>
 
-              <div className="mt-4">
+                <Field label="Relationship">
+                  <select className={inputCls} value={relationship} onChange={(e) => setRelationship(e.target.value as any)}>
+                    {RELATIONSHIP.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
                 <Field label="Notes">
                   <textarea
-                    className={`${inputCls} min-h-[120px]`}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Quick notes…"
+                    className={`${inputCls} min-h-[110px]`}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Anything important…"
                   />
                 </Field>
               </div>
@@ -322,10 +321,6 @@ export default function PostDealPage() {
               >
                 Submit Deal
               </button>
-
-              <div className="mt-3 text-[11px] text-white/45">
-                Submits to Deal House + fires Discord webhook automatically.
-              </div>
             </>
           )}
         </div>
@@ -343,16 +338,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-/* -------- formatting helpers -------- */
-
-function cleanPhone(raw: string) {
-  const digits = (raw || '').replace(/\D/g, '').slice(0, 10)
-  if (digits.length !== 10) return raw?.trim() || null
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
-}
-
-function formatPhoneLive(v: string) {
-  const digits = (v || '').replace(/\D/g, '').slice(0, 10)
+function formatPhoneLive(input: string) {
+  const digits = (input || '').replace(/\D/g, '').slice(0, 10)
   const a = digits.slice(0, 3)
   const b = digits.slice(3, 6)
   const c = digits.slice(6, 10)
@@ -362,24 +349,30 @@ function formatPhoneLive(v: string) {
   return `(${a}) ${b}-${c}`
 }
 
-function sanitizeMoneyLive(v: string) {
-  // keep digits + 1 dot
-  let s = (v || '').replace(/[^0-9.]/g, '')
-  const parts = s.split('.')
-  if (parts.length > 2) s = parts[0] + '.' + parts.slice(1).join('')
-  return s
+function normalizePhone(raw: string) {
+  const digits = (raw || '').replace(/\D/g, '').slice(0, 10)
+  if (digits.length !== 10) return raw?.trim() || null
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`
 }
 
-function toMoneyNumber(v: string) {
-  if (!v) return null
-  const num = Number(String(v).replace(/,/g, ''))
-  return Number.isFinite(num) ? num : null
+function formatMoneyLive(input: string) {
+  // allow typing; keep only digits + dot, then apply commas + 2 decimals
+  const cleaned = (input || '').replace(/[^0-9.]/g, '')
+  if (!cleaned) return ''
+  const parts = cleaned.split('.')
+  const intPart = parts[0] || ''
+  const decPart = (parts[1] || '').slice(0, 2)
+
+  const intNum = Number(intPart || '0')
+  const intFmt = intNum.toLocaleString()
+
+  if (cleaned.includes('.')) return `${intFmt}.${decPart.padEnd(decPart.length ? decPart.length : 0, '0')}`
+  return intFmt
 }
 
-function formatMoneyString(v: string) {
-  const n = toMoneyNumber(v)
-  if (!n && n !== 0) return ''
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function moneyToNumber(v: string) {
+  const n = Number(String(v || '').replace(/[^0-9.]/g, ''))
+  return Number.isFinite(n) ? n : null
 }
 
 const inputCls =
