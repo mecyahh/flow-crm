@@ -1,150 +1,106 @@
-// ✅ FILE: /app/api/webhooks/deal-posted/route.ts  (CREATE THIS FILE)
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL! // add in Vercel env
 
-// Put your Discord webhook in Vercel env vars:
-// DISCORD_WEBHOOK_URL = https://discord.com/api/webhooks/...
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL!
-
-function jsonError(msg: string, code = 400) {
-  return NextResponse.json({ error: msg }, { status: code })
-}
+const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+  auth: { persistSession: false, autoRefreshToken: false },
+})
 
 function startOfWeekMon(d: Date) {
-  const x = new Date(d)
-  const day = x.getDay() // Sun=0
+  const day = d.getDay()
   const diff = day === 0 ? -6 : 1 - day
-  x.setDate(x.getDate() + diff)
-  x.setHours(0, 0, 0, 0)
-  return x
+  const base = new Date(d)
+  base.setDate(d.getDate() + diff)
+  base.setHours(0, 0, 0, 0)
+  return base
 }
 
-function toISO(d: Date) {
-  return d.toISOString()
-}
-
-function fmtMoney(n: number) {
-  const v = Math.round(n)
-  return v.toLocaleString()
-}
-
-function annualize(premium: number) {
-  // If you're storing MONTHLY premium, this is correct.
-  // If you're storing ANNUAL premium already, change this to: return premium
-  return premium * 12
+function money(n: number) {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
 }
 
 export async function POST(req: Request) {
   try {
-    if (!DISCORD_WEBHOOK_URL) return jsonError('Missing DISCORD_WEBHOOK_URL', 500)
+    if (!DISCORD_WEBHOOK_URL) return NextResponse.json({ ok: true })
 
-    const auth = req.headers.get('authorization') || ''
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
-    if (!token) return jsonError('Unauthorized', 401)
+    const body = await req.json()
+    const dealId = String(body?.deal_id || '')
+    if (!dealId) return NextResponse.json({ error: 'Missing deal_id' }, { status: 400 })
 
-    const { deal_id } = await req.json()
-    if (!deal_id) return jsonError('Missing deal_id')
-
-    // Verify the caller is logged in (agent token)
-    const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    })
-    const { data: userRes, error: userErr } = await supaUser.auth.getUser()
-    if (userErr || !userRes.user) return jsonError('Unauthorized', 401)
-
-    // Use service role to read everything needed + compute rank
-    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE)
-
-    // Load deal
-    const { data: deal, error: dealErr } = await admin
+    // get deal
+    const { data: deal, error: dErr } = await admin
       .from('deals')
-      .select('id, agent_id, company, premium, policy_number, created_at')
-      .eq('id', deal_id)
+      .select('id, agent_id, full_name, company, product, premium, created_at')
+      .eq('id', dealId)
       .single()
 
-    if (dealErr || !deal) return jsonError('Deal not found', 404)
+    if (dErr || !deal) return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
 
-    // Load agent profile name
+    // get agent profile
     const { data: prof } = await admin
       .from('profiles')
       .select('id, first_name, last_name, email')
       .eq('id', deal.agent_id)
-      .single()
+      .maybeSingle()
 
-    const name =
-      `${(prof?.first_name || '').trim()} ${(prof?.last_name || '').trim()}`.trim() ||
-      (prof?.email || 'Agent')
+    const agentName =
+      `${prof?.first_name || ''} ${prof?.last_name || ''}`.trim() ||
+      (prof?.email ? prof.email.split('@')[0] : 'Agent')
 
-    const company = (deal.company || '—').trim()
-    const product = (deal.policy_number || '—').trim() // ← replace with deal.product if you add a product column later
+    const prem = Number(deal.premium || 0)
+    const ap = Math.round(prem * 12) // Annual Premium (assumes premium is monthly)
 
-    const premiumNum =
-      typeof deal.premium === 'number'
-        ? deal.premium
-        : typeof deal.premium === 'string'
-        ? Number(deal.premium.replace(/[^0-9.]/g, ''))
-        : Number(deal.premium || 0)
-
-    const ap = annualize(Number.isFinite(premiumNum) ? premiumNum : 0)
-
-    // Compute weekly rank by Annual Premium (Mon-Sun)
+    // weekly standing (sum AP by agent this week)
     const now = new Date()
-    const weekStart = startOfWeekMon(now)
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekEnd.getDate() + 7)
+    const wk = startOfWeekMon(now).toISOString()
 
     const { data: weekDeals } = await admin
       .from('deals')
       .select('agent_id, premium, created_at')
-      .gte('created_at', toISO(weekStart))
-      .lt('created_at', toISO(weekEnd))
+      .gte('created_at', wk)
       .limit(50000)
 
-    const sums = new Map<string, number>()
-    ;(weekDeals || []).forEach((d: any) => {
-      const p =
-        typeof d.premium === 'number'
-          ? d.premium
-          : typeof d.premium === 'string'
-          ? Number(String(d.premium).replace(/[^0-9.]/g, ''))
-          : Number(d.premium || 0)
-      const apv = annualize(Number.isFinite(p) ? p : 0)
-      sums.set(d.agent_id, (sums.get(d.agent_id) || 0) + apv)
-    })
+    const map = new Map<string, number>()
+    for (const r of weekDeals || []) {
+      const p = Number((r as any).premium || 0)
+      const ap2 = Math.round(p * 12)
+      map.set((r as any).agent_id, (map.get((r as any).agent_id) || 0) + ap2)
+    }
 
-    const sorted = Array.from(sums.entries()).sort((a, b) => b[1] - a[1])
-    const rank = Math.max(1, sorted.findIndex(([aid]) => aid === deal.agent_id) + 1)
+    const ranking = Array.from(map.entries()).sort((a, b) => b[1] - a[1])
+    const place = Math.max(1, ranking.findIndex((x) => x[0] === deal.agent_id) + 1)
+    const suffix =
+      place % 10 === 1 && place % 100 !== 11
+        ? 'st'
+        : place % 10 === 2 && place % 100 !== 12
+        ? 'nd'
+        : place % 10 === 3 && place % 100 !== 13
+        ? 'rd'
+        : 'th'
 
-    const lines = [
-      `**User Name:** ${name}`,
-      `**Company:** ${company}`,
-      `**Product:** ${product}`,
-      `**AP:** $${fmtMoney(ap)}`,
-      `**Leaderboard Standing (week):** ${rank}${ordinal(rank)} Place`,
-    ]
+    const payload = {
+      content: [
+        `**User Name:** ${agentName}`,
+        `**Company:** ${deal.company || '—'}`,
+        `**Product:** ${deal.product || '—'}`,
+        `**AP:** $${money(ap)}`,
+        `**Lead board Standing (week):** ${place}${suffix} Place`,
+      ].join('\n'),
+    }
 
     await fetch(DISCORD_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: lines.join('\n'),
-      }),
+      body: JSON.stringify(payload),
     })
 
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ ok: true }) // best-effort; never break agent submit
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Webhook failed' }, { status: 500 })
   }
-}
-
-function ordinal(n: number) {
-  const s = ['th', 'st', 'nd', 'rd']
-  const v = n % 100
-  return s[(v - 20) % 10] || s[v] || s[0]
 }
