@@ -1,102 +1,91 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-export const dynamic = 'force-dynamic'
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL! // add in Vercel env
-
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
-  auth: { persistSession: false, autoRefreshToken: false },
-})
-
-function startOfWeekMon(d: Date) {
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  const base = new Date(d)
-  base.setDate(d.getDate() + diff)
-  base.setHours(0, 0, 0, 0)
-  return base
-}
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 function money(n: number) {
-  return n.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function ordinal(n: number) {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
 export async function POST(req: Request) {
   try {
-    if (!DISCORD_WEBHOOK_URL) return NextResponse.json({ ok: true })
-
     const body = await req.json()
-    const dealId = String(body?.deal_id || '')
-    if (!dealId) return NextResponse.json({ error: 'Missing deal_id' }, { status: 400 })
+    const dealId = String(body.deal_id || '').trim()
+    if (!dealId) return NextResponse.json({ error: 'deal_id required' }, { status: 400 })
 
-    // get deal
-    const { data: deal, error: dErr } = await admin
+    // deal
+    const { data: deal, error: dErr } = await supabaseAdmin
       .from('deals')
-      .select('id, agent_id, full_name, company, product, premium, created_at')
+      .select('id,user_id,company,premium,note,created_at')
       .eq('id', dealId)
       .single()
 
     if (dErr || !deal) return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
 
-    // get agent profile
-    const { data: prof } = await admin
+    // profile
+    const { data: prof } = await supabaseAdmin
       .from('profiles')
-      .select('id, first_name, last_name, email')
-      .eq('id', deal.agent_id)
-      .maybeSingle()
+      .select('id,first_name,last_name,email')
+      .eq('id', deal.user_id)
+      .single()
 
-    const agentName =
-      `${prof?.first_name || ''} ${prof?.last_name || ''}`.trim() ||
-      (prof?.email ? prof.email.split('@')[0] : 'Agent')
+    const userName =
+      [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim() ||
+      (prof?.email ? String(prof.email).split('@')[0] : '—')
 
-    const prem = Number(deal.premium || 0)
-    const ap = Math.round(prem * 12) // Annual Premium (assumes premium is monthly)
+    // product (stored in note as "Product: ___")
+    const note = String((deal as any).note || '')
+    const productMatch = note.match(/product_name:\s*(.+)/i) || note.match(/Product:\s*(.+)/i)
+    const product = (productMatch?.[1] || '').trim()
 
-    // weekly standing (sum AP by agent this week)
+    const carrierLine = [String(deal.company || '').trim(), product].filter(Boolean).join(' ').trim()
+
+    const ap = Number(deal.premium || 0)
+
+    // weekly ranking (simple: sum AP per user for week, compute rank)
     const now = new Date()
-    const wk = startOfWeekMon(now).toISOString()
+    const day = now.getDay()
+    const diff = day === 0 ? -6 : 1 - day
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() + diff)
+    weekStart.setHours(0, 0, 0, 0)
 
-    const { data: weekDeals } = await admin
+    const { data: weekDeals } = await supabaseAdmin
       .from('deals')
-      .select('agent_id, premium, created_at')
-      .gte('created_at', wk)
-      .limit(50000)
+      .select('user_id,premium,created_at')
+      .gte('created_at', weekStart.toISOString())
+      .limit(100000)
 
     const map = new Map<string, number>()
-    for (const r of weekDeals || []) {
-      const p = Number((r as any).premium || 0)
-      const ap2 = Math.round(p * 12)
-      map.set((r as any).agent_id, (map.get((r as any).agent_id) || 0) + ap2)
-    }
+    ;(weekDeals || []).forEach((r: any) => {
+      const uid = r.user_id
+      if (!uid) return
+      const pn = Number(typeof r.premium === 'string' ? r.premium.replace(/[^0-9.]/g, '') : r.premium || 0)
+      map.set(uid, (map.get(uid) || 0) + (Number.isFinite(pn) ? pn : 0))
+    })
 
-    const ranking = Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-    const place = Math.max(1, ranking.findIndex((x) => x[0] === deal.agent_id) + 1)
-    const suffix =
-      place % 10 === 1 && place % 100 !== 11
-        ? 'st'
-        : place % 10 === 2 && place % 100 !== 12
-        ? 'nd'
-        : place % 10 === 3 && place % 100 !== 13
-        ? 'rd'
-        : 'th'
+    const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1])
+    const rankIdx = sorted.findIndex(([uid]) => uid === deal.user_id)
+    const rank = rankIdx >= 0 ? `${ordinal(rankIdx + 1)} place` : '—'
 
-    const payload = {
-      content: [
-        `**User Name:** ${agentName}`,
-        `**Company:** ${deal.company || '—'}`,
-        `**Product:** ${deal.product || '—'}`,
-        `**AP:** $${money(ap)}`,
-        `**Lead board Standing (week):** ${place}${suffix} Place`,
-      ].join('\n'),
-    }
+    // get webhook url from settings table or env
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+    if (!webhookUrl) return NextResponse.json({ ok: true, skipped: 'No webhook url set' })
 
-    await fetch(DISCORD_WEBHOOK_URL, {
+    const text =
+      `${userName}\n` +
+      `${carrierLine || String(deal.company || '').trim()}\n` +
+      `AP: $${money(ap)}\n` +
+      `Ranking: ${rank}`
+
+    await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ content: text }),
     })
 
     return NextResponse.json({ ok: true })
