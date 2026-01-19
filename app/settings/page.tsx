@@ -403,7 +403,6 @@ export default function SettingsPage() {
     })
 
     await loadCarriers()
-    await loadCarrierStats()
   })
 }
 
