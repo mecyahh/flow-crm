@@ -363,46 +363,49 @@ export default function SettingsPage() {
   }, [carriers, carrierSearch])
 
   async function createCarrier() {
-    await run(setCreatingCarrier, setToast, 'Carrier created', async () => {
-      const name = newCarrier.name.trim()
-      if (!name) throw new Error('Carrier name required')
+  await run(setCreatingCarrier, setToast, 'Carrier created', async () => {
+    const name = newCarrier.name.trim()
+    if (!name) throw new Error('Carrier name required')
 
-      const adv = Number(newCarrier.advance_rate)
-      if (!Number.isFinite(adv)) throw new Error('Advance rate invalid')
+    const adv = Number(newCarrier.advance_rate)
+    if (!Number.isFinite(adv) || adv <= 0) throw new Error('Advance rate invalid')
 
-      const sort = newCarrier.sort_order.trim() ? Number(newCarrier.sort_order.trim()) : 999
-if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
+    // ✅ sort_order is NOT NULL in your DB, so never send null
+    const sort = newCarrier.sort_order.trim() ? Number(newCarrier.sort_order.trim()) : 999
+    if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
 
-      cconst payload = {
-  name,
-  supported_name: newCarrier.supported_name.trim() || null,
-  advance_rate: adv,
-  active: !!newCarrier.active,
-  sort_order: sort, // ✅ never null
-  eapp_url: newCarrier.eapp_url.trim() || null,
-  portal_url: newCarrier.portal_url.trim() || null,
-  support_phone: newCarrier.support_phone.trim() || null,
-  logo_url: newCarrier.logo_url.trim() || null,
-}
+    const payload = {
+      name,
+      supported_name: newCarrier.supported_name.trim() || null,
+      advance_rate: adv,
+      active: !!newCarrier.active,
+      sort_order: sort, // ✅ never null
+      eapp_url: newCarrier.eapp_url.trim() || null,
+      portal_url: newCarrier.portal_url.trim() || null,
+      support_phone: newCarrier.support_phone.trim() || null,
+      logo_url: newCarrier.logo_url.trim() || null,
+    }
 
-      const { error } = await supabase.from('carriers').insert(payload)
-      if (error) throw error
+    const { error } = await supabase.from('carriers').insert(payload)
+    if (error) throw error
 
-      setCreateOpen(false)
-      setNewCarrier({
-        name: '',
-        supported_name: '',
-        advance_rate: '0.75',
-        sort_order: '',
-        active: true,
-        eapp_url: '',
-        portal_url: '',
-        support_phone: '',
-        logo_url: '',
-      })
-      await loadCarriers()
+    setCreateOpen(false)
+    setNewCarrier({
+      name: '',
+      supported_name: '',
+      advance_rate: '0.75',
+      sort_order: '',
+      active: true,
+      eapp_url: '',
+      portal_url: '',
+      support_phone: '',
+      logo_url: '',
     })
-  }
+
+    await loadCarriers()
+    await loadCarrierStats()
+  })
+}
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
