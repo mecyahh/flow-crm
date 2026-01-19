@@ -403,8 +403,9 @@ function Row({ head, left, mid, right }: { head?: boolean; left: string; mid: st
   )
 }
 
-function formatMoney(n: number) {
-  return Math.round(n).toLocaleString()
+function money(n: number) {
+  const num = Number(n || 0)
+  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function timeAgo(d: Date) {
