@@ -1,3 +1,4 @@
+// ✅ REPLACE ENTIRE FILE: /app/settings/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -23,9 +24,13 @@ type CarrierRow = {
   created_at: string
   name: string
   supported_name: string | null
-  advance_rate: number | null
-  active: boolean | null
+  advance_rate: number
+  active: boolean
   sort_order: number | null
+  eapp_url: string | null
+  portal_url: string | null
+  support_phone: string | null
+  logo_url: string | null
 }
 
 const SUPPORTED_NAMES = [
@@ -49,25 +54,57 @@ const THEMES = [
   { key: 'orange', label: 'Grey / Orange' },
 ] as const
 
-const COMP_VALUES = Array.from({ length: 41 }, (_, i) => i * 5) // 0..200 in 5% steps
+const COMP_VALUES = Array.from({ length: 41 }, (_, i) => i * 5) // 0..200
+
+function errMsg(e: any) {
+  return e?.message || e?.error_description || e?.error || 'Something failed'
+}
+
+/** consistent action wrapper: every button “does something” */
+async function run<T>(
+  setBusy: (v: boolean) => void,
+  setToast: (v: string | null) => void,
+  label: string,
+  fn: () => Promise<T>
+) {
+  try {
+    setBusy(true)
+    setToast(null)
+    const res = await fn()
+    setToast(`${label} ✅`)
+    return res
+  } catch (e: any) {
+    setToast(`${label} failed: ${errMsg(e)}`)
+    throw e
+  } finally {
+    setBusy(false)
+  }
+}
 
 export default function SettingsPage() {
   const [toast, setToast] = useState<string | null>(null)
+
+  const [booting, setBooting] = useState(false)
   const [me, setMe] = useState<Profile | null>(null)
 
   const [tab, setTab] = useState<'profile' | 'agents' | 'positions' | 'carriers'>('profile')
 
-  // Profile
+  // Profile form
   const [pFirst, setPFirst] = useState('')
   const [pLast, setPLast] = useState('')
   const [pEmail, setPEmail] = useState('')
   const [avatarPreview, setAvatarPreview] = useState<string>('')
 
-  // Agents (admin/owner)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  // Agents
   const [agents, setAgents] = useState<Profile[]>([])
   const [loadingAgents, setLoadingAgents] = useState(false)
+  const [refreshingAgents, setRefreshingAgents] = useState(false)
   const [agentSearch, setAgentSearch] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviting, setInviting] = useState(false)
 
   const [invite, setInvite] = useState({
     first_name: '',
@@ -80,27 +117,37 @@ export default function SettingsPage() {
     theme: 'blue',
   })
 
-  // Positions (admin/owner)
+  // Positions
   const [pos, setPos] = useState({
     user_id: '',
     upline_id: '',
     comp: 70,
-    effective_date: '', // optional (stored by your API if supported)
+    effective_date: '',
   })
+  const [savingPosition, setSavingPosition] = useState(false)
 
-  // Carriers (admin only)
+  // Carriers
   const [loadingCarriers, setLoadingCarriers] = useState(false)
+  const [refreshingCarriers, setRefreshingCarriers] = useState(false)
   const [carriers, setCarriers] = useState<CarrierRow[]>([])
   const [carrierSearch, setCarrierSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [creatingCarrier, setCreatingCarrier] = useState(false)
+
   const [newCarrier, setNewCarrier] = useState({
-    custom_name: '',
-    supported_name: 'Aetna',
+    name: '',
+    supported_name: '',
     advance_rate: '0.75',
+    sort_order: '',
+    active: true,
+    eapp_url: '',
+    portal_url: '',
+    support_phone: '',
+    logo_url: '',
   })
 
   // stats
-  const [dealCountsBySupported, setDealCountsBySupported] = useState<Map<string, number>>(new Map())
+  const [dealCountsByCompany, setDealCountsByCompany] = useState<Map<string, number>>(new Map())
   const [productCountsByCarrier, setProductCountsByCarrier] = useState<Map<string, number>>(new Map())
 
   const isAdmin = me?.role === 'admin'
@@ -113,38 +160,49 @@ export default function SettingsPage() {
   }, [])
 
   async function boot() {
-    const { data: userRes } = await supabase.auth.getUser()
-    const uid = userRes.user?.id
-    if (!uid) {
-      window.location.href = '/login'
-      return
+    setBooting(true)
+    setToast(null)
+    try {
+      const { data: userRes, error: userErr } = await supabase.auth.getUser()
+      if (userErr) throw userErr
+      const uid = userRes.user?.id
+      if (!uid) {
+        window.location.href = '/login'
+        return
+      }
+
+      const { data: prof, error: profErr } = await supabase
+        .from('profiles')
+        .select('id,created_at,email,first_name,last_name,role,is_agency_owner,upline_id,comp,theme,avatar_url')
+        .eq('id', uid)
+        .single()
+
+      if (profErr) throw profErr
+      const p = prof as Profile
+      setMe(p)
+
+      setPFirst(p.first_name || '')
+      setPLast(p.last_name || '')
+      setPEmail(p.email || '')
+      setAvatarPreview(p.avatar_url || '')
+
+      const canAgents = p.role === 'admin' || !!p.is_agency_owner
+      if (canAgents) {
+        await loadAgents()
+        setTab('agents')
+      } else {
+        setTab('profile')
+      }
+
+      if (p.role === 'admin') {
+        await loadCarriers()
+        await loadCarrierStats()
+      }
+    } catch (e: any) {
+      setToast(`Boot failed: ${errMsg(e)}`)
+    } finally {
+      setBooting(false)
     }
-
-    const { data: prof, error: profErr } = await supabase.from('profiles').select('*').eq('id', uid).single()
-    if (profErr || !prof) return
-
-    const p = prof as Profile
-    setMe(p)
-
-    setPFirst(p.first_name || '')
-    setPLast(p.last_name || '')
-    setPEmail(p.email || '')
-    setAvatarPreview(p.avatar_url || '')
-
-    // load agents for admin/owner
-    if (p.role === 'admin' || p.is_agency_owner) {
-      await loadAgents()
-    }
-
-    // admin-only load carriers
-    if (p.role === 'admin') {
-      await loadCarriers()
-      await loadCarrierStats()
-    }
-
-    // default tab
-    if (p.role === 'admin' || p.is_agency_owner) setTab('agents')
-    else setTab('profile')
   }
 
   async function authHeader() {
@@ -153,61 +211,58 @@ export default function SettingsPage() {
     return token ? `Bearer ${token}` : ''
   }
 
-  async function saveProfile() {
-    if (!me) return
-    const payload = {
-      first_name: pFirst.trim() || null,
-      last_name: pLast.trim() || null,
-      email: pEmail.trim() || null,
-      avatar_url: avatarPreview?.trim() || null,
-    }
-    const { error } = await supabase.from('profiles').update(payload).eq('id', me.id)
-    if (error) return setToast('Save failed')
-    setToast('Saved ✅')
-    boot()
-  }
-
-  async function uploadAvatar(file: File) {
-    if (!me) return
-    const ext = file.name.split('.').pop() || 'png'
-    const path = `${me.id}.${ext}`
-
-    const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (uploadError) {
-      setToast('Upload failed')
-      return
-    }
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-    const url = data.publicUrl
-
-    const { error: upErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', me.id)
-    if (upErr) {
-      setToast('Could not save avatar')
-      return
-    }
-
-    setAvatarPreview(url)
-    setToast('Profile picture updated ✅')
-    boot()
-  }
-
   async function logout() {
     await supabase.auth.signOut()
     window.location.href = '/login'
   }
 
+  async function saveProfile() {
+    if (!me) return
+    await run(setSavingProfile, setToast, 'Profile saved', async () => {
+      const payload = {
+        first_name: pFirst.trim() || null,
+        last_name: pLast.trim() || null,
+        email: pEmail.trim() || null,
+        avatar_url: avatarPreview?.trim() || null,
+      }
+      const { error } = await supabase.from('profiles').update(payload).eq('id', me.id)
+      if (error) throw error
+      await boot()
+    })
+  }
+
+  async function uploadAvatar(file: File) {
+    if (!me) return
+    await run(setUploadingAvatar, setToast, 'Avatar updated', async () => {
+      const ext = file.name.split('.').pop() || 'png'
+      const path = `${me.id}.${ext}`
+
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      const url = data.publicUrl
+
+      const { error: upErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', me.id)
+      if (upErr) throw upErr
+
+      setAvatarPreview(url)
+      await boot()
+    })
+  }
+
   async function loadAgents() {
     setLoadingAgents(true)
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(5000)
-
-    if (error) setToast('Could not load agents')
-    setAgents((data || []) as Profile[])
-    setLoadingAgents(false)
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(5000)
+      if (error) throw error
+      setAgents((data || []) as Profile[])
+    } catch (e: any) {
+      setToast(`Could not load agents: ${errMsg(e)}`)
+      setAgents([])
+    } finally {
+      setLoadingAgents(false)
+    }
   }
 
   const filteredAgents = useMemo(() => {
@@ -234,93 +289,102 @@ export default function SettingsPage() {
   }, [agents])
 
   async function inviteAgent() {
-    const token = await authHeader()
-    if (!token) return setToast('Not logged in')
+    await run(setInviting, setToast, 'Invite sent', async () => {
+      const token = await authHeader()
+      if (!token) throw new Error('Not logged in')
+      if (!invite.email.trim()) throw new Error('Email required')
+      if (!invite.first_name.trim() || !invite.last_name.trim()) throw new Error('Name required')
 
-    if (!invite.email.trim()) return setToast('Email required')
+      const res = await fetch('/api/admin/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({
+          email: invite.email.trim(),
+          first_name: invite.first_name.trim() || null,
+          last_name: invite.last_name.trim() || null,
+          upline_id: invite.upline_id || null,
+          comp: invite.comp,
+          role: invite.role,
+          is_agency_owner: invite.is_agency_owner,
+          theme: invite.theme,
+        }),
+      })
 
-    const res = await fetch('/api/admin/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: token },
-      body: JSON.stringify({
-        email: invite.email.trim(),
-        first_name: invite.first_name.trim() || null,
-        last_name: invite.last_name.trim() || null,
-        upline_id: invite.upline_id || null,
-        comp: invite.comp,
-        role: invite.role,
-        is_agency_owner: invite.is_agency_owner,
-        theme: invite.theme,
-      }),
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Invite failed')
+
+      setInviteOpen(false)
+      setInvite({
+        first_name: '',
+        last_name: '',
+        email: '',
+        upline_id: '',
+        comp: 70,
+        role: 'agent',
+        is_agency_owner: false,
+        theme: 'blue',
+      })
+      await loadAgents()
     })
-
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) return setToast(json.error || 'Invite failed')
-
-    setToast('Invite sent ✅')
-    setInviteOpen(false)
-    setInvite({
-      first_name: '',
-      last_name: '',
-      email: '',
-      upline_id: '',
-      comp: 70,
-      role: 'agent',
-      is_agency_owner: false,
-      theme: 'blue',
-    })
-    loadAgents()
   }
 
   async function updatePosition() {
-    const token = await authHeader()
-    if (!token) return setToast('Not logged in')
-    if (!pos.user_id) return setToast('Select a user')
+    await run(setSavingPosition, setToast, 'Position updated', async () => {
+      const token = await authHeader()
+      if (!token) throw new Error('Not logged in')
+      if (!pos.user_id) throw new Error('Select a user')
 
-    const res = await fetch('/api/admin/position', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: token },
-      body: JSON.stringify({
-        user_id: pos.user_id,
-        upline_id: pos.upline_id || null,
-        comp: pos.comp,
-        effective_date: pos.effective_date || null,
-      }),
+      const res = await fetch('/api/admin/position', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({
+          user_id: pos.user_id,
+          upline_id: pos.upline_id || null,
+          comp: pos.comp,
+          effective_date: pos.effective_date || null,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Update failed')
+
+      setPos({ user_id: '', upline_id: '', comp: 70, effective_date: '' })
+      await loadAgents()
     })
-
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) return setToast(json.error || 'Update failed')
-
-    setToast('Position updated ✅')
-    setPos({ user_id: '', upline_id: '', comp: 70, effective_date: '' })
-    loadAgents()
   }
 
   async function loadCarriers() {
-  setLoadingCarriers(true)
+    setLoadingCarriers(true)
+    try {
+      const { data, error } = await supabase
+        .from('carriers')
+        .select('id,created_at,name,supported_name,advance_rate,active,sort_order,eapp_url,portal_url,support_phone,logo_url')
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true })
+        .limit(5000)
 
-  const { data, error } = await supabase
-    .from('carriers')
-    .select('id,created_at,name,supported_name,advance_rate,active,sort_order')
-    .order('sort_order', { ascending: true, nullsFirst: false })
-    .order('name', { ascending: true })
-    .limit(5000)
-
-  if (error) setToast(`Could not load carriers: ${error.message}`)
-  setCarriers((data || []) as CarrierRow[])
-  setLoadingCarriers(false)
-}
+      if (error) throw error
+      setCarriers((data || []) as CarrierRow[])
+    } catch (e: any) {
+      setToast(`Could not load carriers: ${errMsg(e)}`)
+      setCarriers([])
+    } finally {
+      setLoadingCarriers(false)
+    }
+  }
 
   async function loadCarrierStats() {
+    // Policies sold from deals.company (string)
     const { data: deals } = await supabase.from('deals').select('id,company').limit(50000)
     const mapDeals = new Map<string, number>()
     ;(deals || []).forEach((d: any) => {
-      const key = (d.company || '').trim()
+      const key = String(d.company || '').trim()
       if (!key) return
       mapDeals.set(key, (mapDeals.get(key) || 0) + 1)
     })
-    setDealCountsBySupported(mapDeals)
+    setDealCountsByCompany(mapDeals)
 
+    // Product counts from carrier_products
     const { data: prod } = await supabase.from('carrier_products').select('id,carrier_id').limit(50000)
     const mapProds = new Map<string, number>()
     ;(prod || []).forEach((p: any) => {
@@ -333,38 +397,69 @@ export default function SettingsPage() {
     const q = carrierSearch.trim().toLowerCase()
     if (!q) return carriers
     return carriers.filter((c) => {
-      const b = [c.name, c.supported_name].join(' ').toLowerCase()
+      const b = [c.name, c.supported_name].filter(Boolean).join(' ').toLowerCase()
       return b.includes(q)
     })
   }, [carriers, carrierSearch])
 
   async function createCarrier() {
-    const custom = newCarrier.custom_name.trim()
-    if (!custom) return setToast('Custom name required')
-    const supported = newCarrier.supported_name.trim()
-    const adv = Number(newCarrier.advance_rate)
-    if (!Number.isFinite(adv) || adv <= 0) return setToast('Advance rate invalid')
+    await run(setCreatingCarrier, setToast, 'Carrier created', async () => {
+      const name = newCarrier.name.trim()
+      if (!name) throw new Error('Carrier name required')
 
-    const { error } = await supabase.from('carriers').insert({
-      custom_name: custom,
-      supported_name: supported,
-      advance_rate: adv,
-      active: true,
+      const adv = Number(newCarrier.advance_rate)
+      if (!Number.isFinite(adv) || adv <= 0) throw new Error('Advance rate invalid')
+
+      const sort = newCarrier.sort_order.trim() ? Number(newCarrier.sort_order.trim()) : null
+      if (newCarrier.sort_order.trim() && !Number.isFinite(sort as any)) throw new Error('Sort order invalid')
+
+      const payload = {
+        name,
+        supported_name: newCarrier.supported_name.trim() || null,
+        advance_rate: adv,
+        active: !!newCarrier.active,
+        sort_order: sort,
+        eapp_url: newCarrier.eapp_url.trim() || null,
+        portal_url: newCarrier.portal_url.trim() || null,
+        support_phone: newCarrier.support_phone.trim() || null,
+        logo_url: newCarrier.logo_url.trim() || null,
+      }
+
+      const { error } = await supabase.from('carriers').insert(payload)
+      if (error) throw error
+
+      setCreateOpen(false)
+      setNewCarrier({
+        name: '',
+        supported_name: '',
+        advance_rate: '0.75',
+        sort_order: '',
+        active: true,
+        eapp_url: '',
+        portal_url: '',
+        support_phone: '',
+        logo_url: '',
+      })
+      await loadCarriers()
+      await loadCarrierStats()
     })
+  }
 
-    if (error) return setToast('Create failed (RLS?)')
+  function policiesForCarrier(c: CarrierRow) {
+    const a = dealCountsByCompany.get(String(c.name || '').trim()) || 0
+    const b = dealCountsByCompany.get(String(c.supported_name || '').trim()) || 0
+    return Math.max(a, b)
+  }
 
-    setToast('Carrier created ✅')
-    setCreateOpen(false)
-    setNewCarrier({ custom_name: '', supported_name: 'Aetna', advance_rate: '0.75' })
-    await loadCarriers()
-    await loadCarrierStats()
+  function productsForCarrier(c: CarrierRow) {
+    return productCountsByCarrier.get(c.id) || 0
   }
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
 
+      {/* TOAST */}
       {toast && (
         <div className="fixed top-5 right-5 z-50">
           <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
@@ -383,8 +478,9 @@ export default function SettingsPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
             <p className="text-sm text-white/60 mt-1">
-              Profile + {canManageAgents ? 'Agent Management' : 'Basics'} {isAdmin ? '+ Carrier Config' : ''}
+              Profile{canManageAgents ? ' + Agents + Positions' : ''}{isAdmin ? ' + Carriers' : ''}
             </p>
+            {booting && <div className="text-xs text-white/45 mt-2">Loading settings…</div>}
           </div>
 
           <div className="flex gap-2">
@@ -417,7 +513,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between gap-4 mb-6">
               <div>
                 <div className="text-sm font-semibold">My Profile</div>
-                <div className="text-xs text-white/55 mt-1">Keep it clean + modern.</div>
+                <div className="text-xs text-white/55 mt-1">Update your profile details + avatar.</div>
               </div>
               <button onClick={logout} className={dangerBtn}>
                 Log out
@@ -451,6 +547,7 @@ export default function SettingsPage() {
                       const f = e.target.files?.[0]
                       if (f) uploadAvatar(f)
                     }}
+                    disabled={uploadingAvatar}
                   />
                   <div className="text-[11px] text-white/55 mt-2">
                     Uploads to Supabase Storage bucket: <b>avatars</b>
@@ -463,16 +560,16 @@ export default function SettingsPage() {
               <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center gap-4">
                 <div className="text-xs text-white/60">Preview</div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarPreview}
-                  alt="avatar"
-                  className="h-12 w-12 rounded-2xl border border-white/10 object-cover"
-                />
+                <img src={avatarPreview} alt="avatar" className="h-12 w-12 rounded-2xl border border-white/10 object-cover" />
               </div>
             )}
 
-            <button onClick={saveProfile} className={saveWide}>
-              Save Profile
+            <button
+              onClick={saveProfile}
+              disabled={savingProfile}
+              className={saveWide + (savingProfile ? ' opacity-50 cursor-not-allowed' : '')}
+            >
+              {savingProfile ? 'Saving…' : 'Save Profile'}
             </button>
           </div>
         )}
@@ -483,15 +580,24 @@ export default function SettingsPage() {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Agents</div>
-                <div className="text-xs text-white/55 mt-1">Invite users + view current roster.</div>
+                <div className="text-xs text-white/55 mt-1">Invite users + view roster. Actions execute immediately.</div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button onClick={() => setInviteOpen(true)} className={saveBtn}>
                   Add Agent
                 </button>
-                <button onClick={loadAgents} className={btnGlass}>
-                  Refresh
+
+                <button
+                  onClick={() =>
+                    run(setRefreshingAgents, setToast, 'Agents refreshed', async () => {
+                      await loadAgents()
+                    })
+                  }
+                  disabled={refreshingAgents}
+                  className={btnGlass + (refreshingAgents ? ' opacity-50 cursor-not-allowed' : '')}
+                >
+                  {refreshingAgents ? 'Refreshing…' : 'Refresh'}
                 </button>
               </div>
             </div>
@@ -506,13 +612,13 @@ export default function SettingsPage() {
             </div>
 
             <div className="rounded-2xl border border-white/10 overflow-hidden">
-             <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
-  <div className="col-span-3">Agent</div>
-  <div className="col-span-4">Email</div>
-  <div className="col-span-2 text-center">Role</div>
-  <div className="col-span-2 text-right">Comp</div>
-  <div className="col-span-1 text-right">Actions</div>
-</div>
+              <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
+                <div className="col-span-3">Agent</div>
+                <div className="col-span-4">Email</div>
+                <div className="col-span-2 text-center">Role</div>
+                <div className="col-span-2 text-right">Comp</div>
+                <div className="col-span-1 text-right">Actions</div>
+              </div>
 
               {loadingAgents && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
 
@@ -520,64 +626,64 @@ export default function SettingsPage() {
                 filteredAgents.map((a) => {
                   const name = `${a.first_name || '—'} ${a.last_name || ''}`.trim()
                   return (
-                   <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
-  <div className="col-span-3 font-semibold">
-    {name}
-    {a.is_agency_owner ? (
-      <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
-        Owner
-      </span>
-    ) : null}
-    {a.role === 'admin' ? (
-      <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
-        Admin
-      </span>
-    ) : null}
-  </div>
+                    <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
+                      <div className="col-span-3 font-semibold">
+                        {name}
+                        {a.is_agency_owner ? (
+                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
+                            Owner
+                          </span>
+                        ) : null}
+                        {a.role === 'admin' ? (
+                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
+                            Admin
+                          </span>
+                        ) : null}
+                      </div>
 
-  <div className="col-span-4 text-white/75">{a.email || '—'}</div>
-  <div className="col-span-2 text-center text-white/70">{a.role || 'agent'}</div>
-  <div className="col-span-2 text-right text-white/80">
-    {typeof a.comp === 'number' ? `${a.comp}%` : '—'}
-  </div>
+                      <div className="col-span-4 text-white/75">{a.email || '—'}</div>
+                      <div className="col-span-2 text-center text-white/70">{a.role || 'agent'}</div>
+                      <div className="col-span-2 text-right text-white/80">
+                        {typeof a.comp === 'number' ? `${a.comp}%` : '—'}
+                      </div>
 
-  <div className="col-span-1 flex justify-end gap-2">
-    {/* ✏️ Edit */}
-    <button
-      type="button"
-      onClick={() => {
-        setToast('Edit UI next (we’ll add modal + save route)')
-      }}
-      className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-2 py-2"
-      title="Edit"
-    >
-      ✏️
-    </button>
+                      <div className="col-span-1 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setToast('Edit UI next (modal + save route)')}
+                          className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-2 py-2"
+                          title="Edit"
+                        >
+                          ✏️
+                        </button>
 
-    {/* 🗑 Delete */}
-    <button
-      type="button"
-      onClick={async () => {
-        const ok = window.confirm(`Delete ${name}? This removes Auth + Profile.`)
-        if (!ok) return
-        const token = await authHeader()
-        const res = await fetch('/api/admin/users/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: token },
-          body: JSON.stringify({ user_id: a.id }),
-        })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) return setToast(json.error || 'Delete failed')
-        setToast('User deleted ✅')
-        loadAgents()
-      }}
-      className="rounded-xl border border-white/10 bg-white/5 hover:bg-red-600/30 transition px-2 py-2"
-      title="Delete"
-    >
-      🗑
-    </button>
-  </div>
-</div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const ok = window.confirm(`Delete ${name}? This removes Auth + Profile.`)
+                            if (!ok) return
+                            try {
+                              const token = await authHeader()
+                              const res = await fetch('/api/admin/users/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: token },
+                                body: JSON.stringify({ user_id: a.id }),
+                              })
+                              const json = await res.json().catch(() => ({}))
+                              if (!res.ok) throw new Error(json.error || 'Delete failed')
+                              setToast('User deleted ✅')
+                              await loadAgents()
+                            } catch (e: any) {
+                              setToast(errMsg(e))
+                            }
+                          }}
+                          className="rounded-xl border border-white/10 bg-white/5 hover:bg-red-600/30 transition px-2 py-2"
+                          title="Delete"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </div>
                   )
                 })}
 
@@ -616,7 +722,7 @@ export default function SettingsPage() {
                   value={pos.upline_id}
                   onChange={(e) => setPos((p) => ({ ...p, upline_id: e.target.value }))}
                 >
-                  <option value="">None…</option>
+                  <option value="">None</option>
                   {uplineOptions.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
@@ -625,7 +731,7 @@ export default function SettingsPage() {
                 </select>
               </Field>
 
-              <Field label="Comp % (5% increments)">
+              <Field label="Comp">
                 <select
                   className={inputCls}
                   value={pos.comp}
@@ -638,24 +744,24 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </Field>
+
+              <Field label="Effective Date (optional)">
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={pos.effective_date}
+                  onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))}
+                />
+              </Field>
             </div>
 
-            <Field label="Effective Date (optional)">
-              <input
-                className={inputCls}
-                value={pos.effective_date}
-                onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))}
-                placeholder="YYYY-MM-DD"
-              />
-            </Field>
-
-            <button onClick={updatePosition} className={saveWide}>
-              Save Position
+            <button
+              onClick={updatePosition}
+              disabled={savingPosition}
+              className={saveWide + (savingPosition ? ' opacity-50 cursor-not-allowed' : '')}
+            >
+              {savingPosition ? 'Saving…' : 'Save Position'}
             </button>
-
-            <div className="mt-3 text-xs text-white/50">
-              If this fails, your <b>/api/admin/position</b> route or RLS is blocking updates.
-            </div>
           </div>
         )}
 
@@ -665,21 +771,25 @@ export default function SettingsPage() {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Carriers</div>
-                <div className="text-xs text-white/55 mt-1">Admin-only. Click a carrier row to open details.</div>
+                <div className="text-xs text-white/55 mt-1">Admin-only carrier configuration.</div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button onClick={() => setCreateOpen(true)} className={saveBtn}>
                   Create Carrier
                 </button>
+
                 <button
-                  onClick={async () => {
-                    await loadCarriers()
-                    await loadCarrierStats()
-                  }}
-                  className={btnGlass}
+                  onClick={() =>
+                    run(setRefreshingCarriers, setToast, 'Carriers refreshed', async () => {
+                      await loadCarriers()
+                      await loadCarrierStats()
+                    })
+                  }
+                  disabled={refreshingCarriers}
+                  className={btnGlass + (refreshingCarriers ? ' opacity-50 cursor-not-allowed' : '')}
                 >
-                  Refresh
+                  {refreshingCarriers ? 'Refreshing…' : 'Refresh'}
                 </button>
               </div>
             </div>
@@ -699,29 +809,34 @@ export default function SettingsPage() {
                 <div className="col-span-3">Supported Name</div>
                 <div className="col-span-2 text-center">Policies Sold</div>
                 <div className="col-span-2 text-center">Products</div>
-                <div className="col-span-2 text-right">Advance Rate</div>
+                <div className="col-span-2 text-right">Advance</div>
               </div>
 
               {loadingCarriers && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
 
               {!loadingCarriers &&
-                filteredCarriers.map((c) => {
-                  const policies = dealCountsBySupported.get((c.supported_name || '').trim()) || 0
-                  const products = productCountsByCarrier.get(c.id) || 0
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => (window.location.href = `/settings/carriers/${c.id}`)}
-                      className="w-full text-left grid grid-cols-12 px-4 py-3 border-b border-white/10 hover:bg-white/5 transition text-sm"
-                    >
-                      <div className="col-span-3 font-semibold">{c.name}</div>
-                      <div className="col-span-3 text-white/80">{c.supported_name}</div>
-                      <div className="col-span-2 text-center">{policies}</div>
-                      <div className="col-span-2 text-center">{products}</div>
-                      <div className="col-span-2 text-right text-white/80">{Number(c.advance_rate).toFixed(2)}</div>
-                    </button>
-                  )
-                })}
+                filteredCarriers.map((c) => (
+                  <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
+                    <div className="col-span-3 font-semibold">
+                      <div className="flex items-center gap-2">
+                        {c.active ? (
+                          <span className="text-[10px] px-2 py-1 rounded-xl border bg-green-500/10 border-green-400/20 text-green-200">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
+                            Inactive
+                          </span>
+                        )}
+                        <span>{c.name}</span>
+                      </div>
+                    </div>
+                    <div className="col-span-3 text-white/70">{c.supported_name || '—'}</div>
+                    <div className="col-span-2 text-center">{policiesForCarrier(c)}</div>
+                    <div className="col-span-2 text-center">{productsForCarrier(c)}</div>
+                    <div className="col-span-2 text-right">{Number(c.advance_rate || 0).toFixed(2)}</div>
+                  </div>
+                ))}
 
               {!loadingCarriers && filteredCarriers.length === 0 && (
                 <div className="px-4 py-6 text-sm text-white/60">No carriers.</div>
@@ -729,49 +844,71 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* INVITE MODAL */}
-      {inviteOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-3xl">
-            <div className="flex items-start justify-between gap-4 mb-5">
-              <div>
-                <div className="text-lg font-semibold">Add Agent</div>
-                <div className="text-xs text-white/55 mt-1">Sends an email invite to create their login.</div>
-              </div>
-
-              <button onClick={() => setInviteOpen(false)} className={closeBtn}>
-                Close
-              </button>
-            </div>
-
+        {/* INVITE MODAL */}
+        {inviteOpen && (
+          <Modal onClose={() => setInviteOpen(false)} title="Invite Agent">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="First Name">
-                <input className={inputCls} value={invite.first_name} onChange={(e) => setInvite((p) => ({ ...p, first_name: e.target.value }))} />
+                <input
+                  className={inputCls}
+                  value={invite.first_name}
+                  onChange={(e) => setInvite((s) => ({ ...s, first_name: e.target.value }))}
+                />
               </Field>
 
               <Field label="Last Name">
-                <input className={inputCls} value={invite.last_name} onChange={(e) => setInvite((p) => ({ ...p, last_name: e.target.value }))} />
+                <input
+                  className={inputCls}
+                  value={invite.last_name}
+                  onChange={(e) => setInvite((s) => ({ ...s, last_name: e.target.value }))}
+                />
               </Field>
 
               <Field label="Email">
-                <input className={inputCls} value={invite.email} onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))} />
+                <input
+                  className={inputCls}
+                  value={invite.email}
+                  onChange={(e) => setInvite((s) => ({ ...s, email: e.target.value }))}
+                />
+              </Field>
+
+              <Field label="Role">
+                <select
+                  className={inputCls}
+                  value={invite.role}
+                  onChange={(e) => setInvite((s) => ({ ...s, role: e.target.value }))}
+                >
+                  <option value="agent">select</option>
+                  {uplineOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
               </Field>
 
               <Field label="Upline (optional)">
-                <select className={inputCls} value={invite.upline_id} onChange={(e) => setInvite((p) => ({ ...p, upline_id: e.target.value }))}>
-                  <option value="">None…</option>
-                  {uplineOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
+                <select
+                  className={inputCls}
+                  value={pos.upline_id}
+                  onChange={(e) => setPos((p) => ({ ...p, upline_id: e.target.value }))}
+                >
+                  <option value="">None</option>
+                  {uplineOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
                     </option>
                   ))}
                 </select>
               </Field>
 
               <Field label="Comp %">
-                <select className={inputCls} value={invite.comp} onChange={(e) => setInvite((p) => ({ ...p, comp: Number(e.target.value) }))}>
+                <select
+                  className={inputCls}
+                  value={pos.comp}
+                  onChange={(e) => setPos((p) => ({ ...p, comp: Number(e.target.value) }))}
+                >
                   {COMP_VALUES.map((v) => (
                     <option key={v} value={v}>
                       {v}%
@@ -780,119 +917,128 @@ export default function SettingsPage() {
                 </select>
               </Field>
 
-              <Field label="Role">
-                <select className={inputCls} value={invite.role} onChange={(e) => setInvite((p) => ({ ...p, role: e.target.value }))}>
-                  <option value="agent">Agent</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </Field>
-
-              <Field label="Agency Owner">
-                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={invite.is_agency_owner}
-                    onChange={(e) => setInvite((p) => ({ ...p, is_agency_owner: e.target.checked }))}
-                    className="h-5 w-5"
-                  />
-                  <div className="text-sm">Mark as Agency Owner</div>
-                </div>
-              </Field>
-
-              <Field label="Theme">
-                <select className={inputCls} value={invite.theme} onChange={(e) => setInvite((p) => ({ ...p, theme: e.target.value }))}>
-                  {THEMES.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
+              <Field label="Effective Date (optional)">
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={pos.effective_date}
+                  onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))}
+                />
               </Field>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => setInviteOpen(false)} className={closeBtn}>
-                Cancel
-              </button>
-              <button onClick={inviteAgent} className={saveBtn}>
-                Invite
-              </button>
-            </div>
+            <button
+              onClick={updatePosition}
+              disabled={savingPosition}
+              className={saveWide + (savingPosition ? ' opacity-50 cursor-not-allowed' : '')}
+            >
+              {savingPosition ? 'Saving…' : 'Save Position'}
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* CREATE CARRIER MODAL */}
-      {createOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-2xl">
+        {/* CARRIERS */}
+        {tab === 'carriers' && isAdmin && (
+          <div className="glass rounded-2xl border border-white/10 p-6">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
-                <div className="text-lg font-semibold">Add a Carrier</div>
-                <div className="text-xs text-white/55 mt-1">Admin-only</div>
+                <div className="text-sm font-semibold">Carriers</div>
+                <div className="text-xs text-white/55 mt-1">
+                  Configure carrier access, links, and visibility.
+                </div>
               </div>
-              <button onClick={() => setCreateOpen(false)} className={closeBtn}>
-                Close
-              </button>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Custom name">
-                <input
-                  className={inputCls}
-                  value={newCarrier.custom_name}
-                  onChange={(e) => setNewCarrier((p) => ({ ...p, custom_name: e.target.value }))}
-                  placeholder="American Amicable"
-                />
-              </Field>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setCreateOpen(true)} className={saveBtn}>
+                  Add Carrier
+                </button>
 
-              <Field label="Supported name">
-                <select
-                  className={inputCls}
-                  value={newCarrier.supported_name}
-                  onChange={(e) => setNewCarrier((p) => ({ ...p, supported_name: e.target.value }))}
+                <button
+                  onClick={() =>
+                    run(setRefreshingCarriers, setToast, 'Carriers refreshed', async () => {
+                      await loadCarriers()
+                      await loadCarrierStats()
+                    })
+                  }
+                  disabled={refreshingCarriers}
+                  className={btnGlass + (refreshingCarriers ? ' opacity-50 cursor-not-allowed' : '')}
                 >
-                  {SUPPORTED_NAMES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Advance rate (ex: .75)">
-                <input
-                  className={inputCls}
-                  value={newCarrier.advance_rate}
-                  onChange={(e) => setNewCarrier((p) => ({ ...p, advance_rate: e.target.value }))}
-                  placeholder="0.75"
-                />
-              </Field>
+                  {refreshingCarriers ? 'Refreshing…' : 'Refresh'}
+                </button>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => setCreateOpen(false)} className={closeBtn}>
-                Cancel
-              </button>
-              <button onClick={createCarrier} className={saveBtn}>
-                Create Carrier
-              </button>
+            <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2 mb-4">
+              <input
+                className="bg-transparent outline-none text-sm w-full placeholder:text-white/40"
+                placeholder="Search carriers…"
+                value={carrierSearch}
+                onChange={(e) => setCarrierSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="rounded-2xl border border-white/10 overflow-hidden">
+              <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
+                <div className="col-span-3">Carrier</div>
+                <div className="col-span-2 text-center">Advance</div>
+                <div className="col-span-2 text-center">Policies</div>
+                <div className="col-span-2 text-center">Products</div>
+                <div className="col-span-1 text-center">Active</div>
+                <div className="col-span-2 text-right">Actions</div>
+              </div>
+
+              {loadingCarriers && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
+
+              {!loadingCarriers &&
+                filteredCarriers.map((c) => (
+                  <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
+                    <div className="col-span-3 font-semibold">
+                      {c.name}
+                      {c.supported_name && (
+                        <div className="text-[11px] text-white/50">{c.supported_name}</div>
+                      )}
+                    </div>
+
+                    <div className="col-span-2 text-center">
+                      {(c.advance_rate * 100).toFixed(2)}%
+                    </div>
+
+                    <div className="col-span-2 text-center">
+                      {policiesForCarrier(c)}
+                    </div>
+
+                    <div className="col-span-2 text-center">
+                      {productsForCarrier(c)}
+                    </div>
+
+                    <div className="col-span-1 text-center">
+                      {c.active ? '✅' : '—'}
+                    </div>
+
+                    <div className="col-span-2 flex justify-end gap-2">
+                      <button
+                        onClick={() => setToast('Edit carrier modal next')}
+                        className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-2 py-2"
+                        title="Edit"
+                      >
+                        ✏️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+              {!loadingCarriers && filteredCarriers.length === 0 && (
+                <div className="px-4 py-6 text-sm text-white/60">No carriers.</div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
-      {children}
-    </div>
-  )
-}
+/* ---------- UI helpers ---------- */
 
 function TabBtn({
   active,
@@ -907,8 +1053,8 @@ function TabBtn({
     <button
       onClick={onClick}
       className={[
-        'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
-        active ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10 hover:bg-white/10',
+        'rounded-2xl px-4 py-2 text-sm font-semibold transition',
+        active ? 'bg-white/15' : 'bg-white/5 hover:bg-white/10',
       ].join(' ')}
     >
       {children}
@@ -916,20 +1062,26 @@ function TabBtn({
   )
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      {children}
+    </div>
+  )
+}
+
+/* ---------- styles ---------- */
+
 const inputCls =
   'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
 const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-
-const closeBtn =
-  'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-3 text-sm font-semibold'
-
+const btnGlass =
+  'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold'
 const saveBtn =
-  'rounded-2xl bg-green-600 hover:bg-green-500 transition px-5 py-3 text-sm font-semibold'
-
+  'rounded-2xl bg-green-600 hover:bg-green-500 transition px-4 py-2 text-sm font-semibold'
 const saveWide =
-  'mt-5 w-full rounded-2xl bg-green-600 hover:bg-green-500 transition px-4 py-3 text-sm font-semibold'
-
+  'mt-6 w-full rounded-2xl bg-green-600 hover:bg-green-500 transition px-4 py-3 text-sm font-semibold'
 const dangerBtn =
-  'rounded-2xl bg-red-600 hover:bg-red-500 transition px-4 py-3 text-sm font-semibold'
+  'rounded-2xl bg-red-600 hover:bg-red-500 transition px-4 py-2 text-sm font-semibold'
