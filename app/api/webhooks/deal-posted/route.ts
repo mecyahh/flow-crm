@@ -40,7 +40,12 @@ export async function POST(req: Request) {
     // product (stored in note as "Product: ___")
     const note = String((deal as any).note || '')
     const productMatch = note.match(/product_name:\s*(.+)/i) || note.match(/Product:\s*(.+)/i)
-    const product = (productMatch?.[1] || '').trim()
+    const rawProduct = (productMatch?.[1] || '').trim()
+
+const product = rawProduct
+  .replace(/\|\s*Effective:.*$/i, '')
+  .replace(/Effective:\s*.*$/i, '')
+  .trim()
 
     const carrierLine = [String(deal.company || '').trim(), product].filter(Boolean).join(' ').trim()
 
