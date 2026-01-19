@@ -237,14 +237,26 @@ export default function FollowUpsClient() {
                 <input className={inputCls} value={form.coverage} onChange={(e) => setForm((f) => ({ ...f, coverage: e.target.value }))} placeholder="100000" />
               </Field>
 
-             <Field label="Follow Up Date">
+            <Field label="Follow Up Date">
   <FlowDatePicker
-    value={form.follow_up_at}
+    value={form.follow_up_date}
     onChange={(v) => {
       setPreset('custom')
-      setForm((f) => ({ ...f, follow_up_at: v }))
+      setForm((f) => ({ ...f, follow_up_date: v }))
     }}
-    placeholder="Select Follow Up Date"
+    placeholder="Select date"
+  />
+</Field>
+
+<Field label="Follow Up Time">
+  <input
+    type="time"
+    className={inputCls}
+    value={form.follow_up_time}
+    onChange={(e) => {
+      setPreset('custom')
+      setForm((f) => ({ ...f, follow_up_time: e.target.value }))
+    }}
   />
 </Field>
             </div>
