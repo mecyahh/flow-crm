@@ -4,6 +4,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import FlowDatePicker from '@/app/components/FlowDatePicker'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -139,7 +140,7 @@ export default function FollowUpsClient() {
       dob: form.dob || null,
       company: form.company || null,
       coverage: toNum(form.coverage),
-      follow_up_at: form.follow_up_at ? new Date(form.follow_up_at).toISOString() : null,
+      follow_up_at: form.follow_up_at ? new Date(form.follow_up_at + 'T00:00:00').toISOString() : null,
       notes: form.notes.trim() || null,
       status: 'upcoming',
     }
@@ -214,10 +215,13 @@ export default function FollowUpsClient() {
                 <input className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: cleanPhone(e.target.value) || '' }))} placeholder="(888) 888-8888" />
               </Field>
 
-              <Field label="Client DOB">
-                <input type="date" className={inputCls} value={form.dob} onChange={(e) => setForm((f) => ({ ...f, dob: e.target.value }))} />
-              </Field>
-
+             <Field label="Client DOB">
+  <FlowDatePicker
+    value={form.dob}
+    onChange={(v) => setForm((f) => ({ ...f, dob: v }))}
+    placeholder="Select DOB"
+  />
+</Field>
               <Field label="Company">
                 <select className={inputCls} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}>
                   <option value="">Select…</option>
@@ -233,17 +237,16 @@ export default function FollowUpsClient() {
                 <input className={inputCls} value={form.coverage} onChange={(e) => setForm((f) => ({ ...f, coverage: e.target.value }))} placeholder="100000" />
               </Field>
 
-              <Field label="Follow Up Date/Time">
-                <input
-                  type="datetime-local"
-                  className={inputCls}
-                  value={form.follow_up_at}
-                  onChange={(e) => {
-                    setPreset('custom')
-                    setForm((f) => ({ ...f, follow_up_at: e.target.value }))
-                  }}
-                />
-              </Field>
+             <Field label="Follow Up Date">
+  <FlowDatePicker
+    value={form.follow_up_at}
+    onChange={(v) => {
+      setPreset('custom')
+      setForm((f) => ({ ...f, follow_up_at: v }))
+    }}
+    placeholder="Select Follow Up Date"
+  />
+</Field>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
