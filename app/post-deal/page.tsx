@@ -1,23 +1,23 @@
+// ✅ REPLACE ENTIRE FILE: /app/post-deal/page.tsx
 'use client'
 
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Sidebar from '@/app/components/Sidebar'
+import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 import FlowDatePicker from '@/app/components/FlowDatePicker'
 
-type Carrier = {
+type CarrierRow = {
   id: string
-  created_at?: string | null
-  custom_name?: string | null
-  name?: string | null
-  supported_name?: string | null
-  is_active?: boolean | null
+  name: string
+  supported_name: string | null
+  active: boolean | null
+  sort_order: number | null
 }
 
-type Product = {
+type ProductRow = {
   id: string
   carrier_id: string
   product_name: string
@@ -28,47 +28,57 @@ type Product = {
 export default function PostDealPage() {
   const router = useRouter()
 
-  const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  const [carriers, setCarriers] = useState<Carrier[]>([])
-  const [products, setProducts] = useState<Product[]>([])
+  const [carriers, setCarriers] = useState<CarrierRow[]>([])
+  const [products, setProducts] = useState<ProductRow[]>([])
 
-  // locked fields
-  const [clientName, setClientName] = useState('')
+  // Form (LOCKED FIELDS)
+  const [full_name, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [dob, setDob] = useState('') // YYYY-MM-DD
-  const [effectiveDate, setEffectiveDate] = useState('') // YYYY-MM-DD
+  const [effective_date, setEffectiveDate] = useState('') // YYYY-MM-DD
 
-  const [carrierId, setCarrierId] = useState('')
-  const [productId, setProductId] = useState('')
+  const [carrier_id, setCarrierId] = useState('')
+  const [company, setCompany] = useState('') // deals.company
+  const [product_name, setProductName] = useState('')
 
-  const [coverageDisplay, setCoverageDisplay] = useState('')
-  const [premiumDisplay, setPremiumDisplay] = useState('')
-  const [policyNumber, setPolicyNumber] = useState('')
+  const [coverage, setCoverage] = useState('')
+  const [premium, setPremium] = useState('')
+  const [policy_number, setPolicyNumber] = useState('')
 
   useEffect(() => {
     boot()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function carrierLabel(c: Carrier) {
-    return (c.custom_name || c.name || c.supported_name || '—').trim()
-  }
+  useEffect(() => {
+    if (!carrier_id) {
+      setProducts([])
+      setProductName('')
+      return
+    }
+    loadProducts(carrier_id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carrier_id])
 
   async function boot() {
     setLoading(true)
 
-    const { data: u, error: uErr } = await supabase.auth.getUser()
-    if (uErr || !u.user) {
-      router.push('/login')
+    const { data: u } = await supabase.auth.getUser()
+    const uid = u.user?.id
+    if (!uid) {
+      window.location.href = '/login'
       return
     }
 
-    // ✅ more forgiving select (works whether table uses name or custom_name)
-    const { data: c, error } = await supabase
+    const { data, error } = await supabase
       .from('carriers')
-      .select('id,created_at,custom_name,name,supported_name,is_active')
+      .select('id,name,supported_name,active,sort_order')
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true })
       .limit(5000)
 
     if (error) {
@@ -78,49 +88,44 @@ export default function PostDealPage() {
       return
     }
 
-    // ✅ don’t depend on is_active existing; if present and false, hide it
-    const cleaned = ((c || []) as Carrier[])
-      .filter((x) => x.is_active !== false)
-      .sort((a, b) => carrierLabel(a).toLowerCase().localeCompare(carrierLabel(b).toLowerCase()))
-
-    setCarriers(cleaned)
+    const activeOnly = ((data || []) as CarrierRow[]).filter((c) => c.active !== false)
+    setCarriers(activeOnly)
     setLoading(false)
-
-    if (cleaned.length === 0) {
-      setToast('No carriers found. (Likely RLS or table empty)')
-    }
   }
 
-  // load products after carrier pick
-  useEffect(() => {
-    if (!carrierId) {
+  async function loadProducts(cid: string) {
+    const { data, error } = await supabase
+      .from('carrier_products')
+      .select('id,carrier_id,product_name,sort_order,is_active')
+      .eq('carrier_id', cid)
+      .order('sort_order', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true })
+      .limit(5000)
+
+    if (error) {
+      setToast(`Could not load products: ${error.message}`)
       setProducts([])
-      setProductId('')
       return
     }
 
-    ;(async () => {
-      const { data, error } = await supabase
-        .from('carrier_products')
-        .select('id,carrier_id,product_name,sort_order,is_active')
-        .eq('carrier_id', carrierId)
-        .limit(5000)
+    const activeOnly = ((data || []) as ProductRow[]).filter((p) => p.is_active !== false)
+    setProducts(activeOnly)
+  }
 
-      if (error) {
-        setToast(`Could not load products: ${error.message}`)
-        setProducts([])
-        return
-      }
+  const carrierOptions = useMemo(() => {
+    return carriers.map((c) => ({
+      id: c.id,
+      label: c.name,
+      supported_name: c.supported_name || c.name,
+    }))
+  }, [carriers])
 
-      const list = ((data || []) as Product[])
-        .filter((p) => p.is_active !== false)
-        .sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999))
-
-      setProducts(list)
-    })()
-  }, [carrierId])
-
-  const productOptions = useMemo(() => products, [products])
+  const productOptions = useMemo(() => {
+    return products.map((p) => ({
+      id: p.id,
+      label: p.product_name,
+    }))
+  }, [products])
 
   async function fireDiscordWebhook(dealId: string) {
     const { data } = await supabase.auth.getSession()
@@ -134,56 +139,63 @@ export default function PostDealPage() {
     }).catch(() => {})
   }
 
-  async function submitDeal() {
-    const { data: u } = await supabase.auth.getUser()
-    const uid = u.user?.id
-    if (!uid) return setToast('Not logged in')
+  async function submit() {
+    if (saving) return
+    setToast(null)
 
-    if (!clientName.trim()) return setToast('Client name required')
-    if (!isValidPhone(phone)) return setToast('Phone must be (888) 888-8888')
-    if (!dob) return setToast('DOB required')
-    if (!effectiveDate) return setToast('Effective date required')
-    if (!carrierId) return setToast('Carrier required')
-    if (!productId) return setToast('Product required')
+    const nameClean = full_name.trim()
+    if (!nameClean) return setToast('Client name is required')
 
-    const coverageNum = parseMoneyToNumber(coverageDisplay)
-    const premiumNum = parseMoneyToNumber(premiumDisplay)
+    if (!company.trim()) return setToast('Select a carrier')
+    if (!product_name.trim()) return setToast('Select a product')
 
-    if (coverageNum === null) return setToast('Coverage required')
-    if (premiumNum === null) return setToast('Premium required')
+    const premNum = toMoneyNumber(premium)
+    if (!Number.isFinite(premNum) || premNum <= 0) return setToast('Premium is required')
 
-    const carrier = carriers.find((c) => c.id === carrierId)
-    const product = products.find((p) => p.id === productId)
+    const covNum = coverage ? toMoneyNumber(coverage) : null
+    if (coverage && (!Number.isFinite(covNum as any) || (covNum as any) <= 0))
+      return setToast('Coverage must be a valid number')
 
-    const payload: any = {
-      // ✅ RLS-safe
-      agent_id: uid,
-      user_id: uid,
+    setSaving(true)
+    try {
+      const { data: u } = await supabase.auth.getUser()
+      const uid = u.user?.id
+      if (!uid) {
+        window.location.href = '/login'
+        return
+      }
 
-      full_name: clientName.trim(),
-      phone: normalizePhone(phone),
-      dob,
-      effective_date: effectiveDate,
+      // ✅ RLS-safe: set BOTH agent_id and user_id to the logged-in user
+      const payload: any = {
+        agent_id: uid,
+        user_id: uid,
 
-      // ✅ store the carrier label the user sees
-      company: carrier ? carrierLabel(carrier) : null,
+        full_name: nameClean,
+        phone: phone ? phone : null,
+        dob: dob || null,
+        company: company.trim(),
+        policy_number: policy_number.trim() || null,
+        coverage: covNum,
+        premium: premNum,
 
-      product_name: product?.product_name || null,
-      product_id: productId,
+        status: 'submitted',
+        // store extra fields without new columns
+        note: buildNote({ product_name, effective_date }),
+      }
 
-      coverage: coverageNum,
-      premium: premiumNum,
+      const { data: inserted, error } = await supabase.from('deals').insert(payload).select('id').single()
+      if (error) throw new Error(error.message)
 
-      policy_number: policyNumber.trim() || null,
-      status: 'submitted',
+      if (inserted?.id) fireDiscordWebhook(inserted.id)
+
+      // ✅ route back to dashboard with refreshed data
+      router.push('/dashboard')
+      router.refresh()
+    } catch (e: any) {
+      setToast(e?.message || 'Submit failed')
+      setSaving(false)
+      return
     }
-
-    const { data: inserted, error } = await supabase.from('deals').insert(payload).select('id').single()
-    if (error) return setToast(error.message)
-
-    if (inserted?.id) await fireDiscordWebhook(inserted.id)
-
-    router.push('/dashboard')
   }
 
   return (
@@ -204,122 +216,150 @@ export default function PostDealPage() {
       )}
 
       <div className="ml-64 px-10 py-10">
-        <div className="mb-6 flex items-end justify-between">
+        <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Post a Deal</h1>
-            <p className="text-sm text-white/60 mt-1">Locked form fields (never change).</p>
+            <p className="text-sm text-white/60 mt-1">
+              Vertical drop-aligned form — phone + money formatting locked.
+            </p>
           </div>
 
-          <button onClick={boot} className={btnGlass}>
-            Refresh Carriers
+          <button onClick={() => router.push('/dashboard')} className={btnGlass}>
+            Back to Dashboard
           </button>
         </div>
 
-        {loading ? (
-          <div className="text-white/60">Loading…</div>
-        ) : (
-          <div className="glass rounded-2xl border border-white/10 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Client Name">
-                <input className={inputCls} value={clientName} onChange={(e) => setClientName(e.target.value)} />
-              </Field>
+        <div className="glass rounded-2xl border border-white/10 p-6">
+          {loading ? (
+            <div className="px-6 py-10 text-center text-white/60">Loading…</div>
+          ) : (
+            <div className="max-w-2xl">
+              {/* ✅ Vertical drop-aligned layout */}
+              <div className="space-y-4">
+                <Field label="Client Name">
+                  <input
+                    className={inputCls}
+                    value={full_name}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Client name"
+                  />
+                </Field>
 
-              <Field label="Phone">
-                <input
-                  className={inputCls}
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhone(e.target.value))}
-                  placeholder="(888) 888-8888"
-                  inputMode="numeric"
-                />
-              </Field>
+                <Field label="Phone">
+                  <input
+                    className={inputCls}
+                    value={phone}
+                    onChange={(e) => setPhone(formatPhone(e.target.value))}
+                    placeholder="(888) 888-8888"
+                    inputMode="tel"
+                  />
+                </Field>
 
-              <Field label="DOB">
-                <FlowDatePicker value={dob} onChange={setDob} placeholder="Select DOB" />
-              </Field>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="DOB">
+                    <FlowDatePicker value={dob} onChange={setDob} placeholder="Select DOB" />
+                  </Field>
 
-              <Field label="Effective Date">
-                <FlowDatePicker value={effectiveDate} onChange={setEffectiveDate} placeholder="Select effective date" />
-              </Field>
+                  <Field label="Effective Date">
+                    <FlowDatePicker value={effective_date} onChange={setEffectiveDate} placeholder="Select Effective Date" />
+                  </Field>
+                </div>
 
-              <Field label="Carrier">
-                <select
-                  className={inputCls}
-                  value={carrierId}
-                  onChange={(e) => {
-                    setCarrierId(e.target.value)
-                    setProductId('')
-                  }}
-                >
-                  <option value="">Select carrier…</option>
-                  {carriers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {carrierLabel(c)}
-                    </option>
-                  ))}
-                </select>
-                {carriers.length === 0 && (
-                  <div className="mt-2 text-xs text-red-300">
-                    No carriers returned. This is either RLS blocking SELECT or the carriers table is empty.
-                  </div>
-                )}
-              </Field>
+                <Field label="Carrier">
+                  <select
+                    className={inputCls}
+                    value={carrier_id}
+                    onChange={(e) => {
+                      const cid = e.target.value
+                      setCarrierId(cid)
 
-              <Field label="Product">
-                <select
-                  className={inputCls}
-                  value={productId}
-                  disabled={!carrierId}
-                  onChange={(e) => setProductId(e.target.value)}
-                >
-                  <option value="">{carrierId ? 'Select product…' : 'Select carrier first…'}</option>
-                  {productOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.product_name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+                      const picked = carrierOptions.find((x) => x.id === cid)
+                      const carrierName = picked?.label || ''
+                      setCompany(carrierName)
+                    }}
+                  >
+                    <option value="">Select carrier…</option>
+                    {carrierOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
 
-              <Field label="Coverage">
-                <input
-                  className={inputCls}
-                  value={coverageDisplay}
-                  onChange={(e) => setCoverageDisplay(formatMoneyInput(e.target.value))}
-                  placeholder="$100,000"
-                  inputMode="numeric"
-                />
-              </Field>
+                <Field label="Product">
+                  <select
+                    className={[inputCls, !carrier_id ? 'opacity-50 cursor-not-allowed' : ''].join(' ')}
+                    value={product_name}
+                    onChange={(e) => setProductName(e.target.value)}
+                    disabled={!carrier_id}
+                  >
+                    <option value="">{carrier_id ? 'Select product…' : 'Select carrier first…'}</option>
+                    {productOptions.map((p) => (
+                      <option key={p.id} value={p.label}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
 
-              <Field label="Premium">
-                <input
-                  className={inputCls}
-                  value={premiumDisplay}
-                  onChange={(e) => setPremiumDisplay(formatMoneyInput(e.target.value))}
-                  placeholder="$100"
-                  inputMode="numeric"
-                />
-              </Field>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Coverage">
+                    <input
+                      className={inputCls}
+                      value={coverage}
+                      onChange={(e) => setCoverage(moneyInput(e.target.value))}
+                      onBlur={() => setCoverage(formatMoneyInput(coverage))}
+                      placeholder="$100,000"
+                      inputMode="decimal"
+                    />
+                  </Field>
 
-              <Field label="Policy #">
-                <input className={inputCls} value={policyNumber} onChange={(e) => setPolicyNumber(e.target.value)} />
-              </Field>
+                  <Field label="Premium">
+                    <input
+                      className={inputCls}
+                      value={premium}
+                      onChange={(e) => setPremium(moneyInput(e.target.value))}
+                      onBlur={() => setPremium(formatMoneyInput(premium))}
+                      placeholder="$100"
+                      inputMode="decimal"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Policy #">
+                  <input
+                    className={inputCls}
+                    value={policy_number}
+                    onChange={(e) => setPolicyNumber(e.target.value)}
+                    placeholder="Policy number"
+                  />
+                </Field>
+              </div>
+
+              <button
+                onClick={submit}
+                disabled={saving}
+                className={[
+                  'mt-6 w-full rounded-2xl transition px-4 py-3 text-sm font-semibold',
+                  saving
+                    ? 'bg-white/10 border border-white/10 text-white/60 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-500',
+                ].join(' ')}
+              >
+                {saving ? 'Submitting…' : 'Submit Deal'}
+              </button>
+
+              <div className="mt-3 text-[11px] text-white/50">
+                Phone auto-formats. Coverage/Premium auto-format. Product disabled until carrier selected.
+              </div>
             </div>
-
-            <button
-              onClick={submitDeal}
-              className="mt-6 w-full rounded-2xl bg-green-600 hover:bg-green-500 transition px-4 py-3 text-sm font-semibold"
-            >
-              Submit Deal
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
 }
-
-/* ---------------- helpers ---------------- */
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -330,40 +370,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function digitsOnly(v: string) {
-  return (v || '').replace(/\D/g, '')
+function formatPhone(input: string) {
+  const digits = (input || '').replace(/\D/g, '').slice(0, 10)
+  if (digits.length === 0) return ''
+  if (digits.length < 4) return `(${digits}`
+  if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
 }
 
-function formatPhone(v: string) {
-  const d = digitsOnly(v).slice(0, 10)
-  if (d.length <= 3) return d
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+// keep input money-ish while typing
+function moneyInput(v: string) {
+  const cleaned = String(v || '').replace(/[^0-9.]/g, '')
+  const parts = cleaned.split('.')
+  if (parts.length <= 1) return cleaned
+  return `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}`
 }
 
-function isValidPhone(v: string) {
-  return /^\(\d{3}\)\s\d{3}-\d{4}$/.test(v)
+function toMoneyNumber(v: string) {
+  const num = Number(String(v || '').replace(/[^0-9.]/g, ''))
+  return Number.isFinite(num) ? num : NaN
 }
 
-function normalizePhone(v: string) {
-  const d = digitsOnly(v)
-  if (d.length !== 10) return null
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`
+// format to $X,XXX on blur
+function formatMoneyInput(v: string) {
+  const n = toMoneyNumber(v)
+  if (!Number.isFinite(n) || n === 0) return v ? '' : ''
+  const whole = Math.round(n)
+  return `$${whole.toLocaleString()}`
 }
 
-function formatMoneyInput(raw: string) {
-  const cleaned = raw.replace(/[^0-9]/g, '')
-  if (!cleaned) return ''
-  const n = Number(cleaned)
-  if (!Number.isFinite(n)) return ''
-  return `$${n.toLocaleString()}`
-}
-
-function parseMoneyToNumber(v: string): number | null {
-  const cleaned = (v || '').replace(/[^0-9.]/g, '')
-  if (!cleaned) return null
-  const n = Number(cleaned)
-  return Number.isFinite(n) ? n : null
+function buildNote({ product_name, effective_date }: { product_name: string; effective_date: string }) {
+  const lines: string[] = []
+  if (product_name) lines.push(`Product: ${product_name}`)
+  if (effective_date) lines.push(`Effective: ${effective_date}`)
+  return lines.length ? lines.join(' | ') : null
 }
 
 const inputCls =
