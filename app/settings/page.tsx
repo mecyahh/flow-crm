@@ -21,10 +21,11 @@ type Profile = {
 type CarrierRow = {
   id: string
   created_at: string
-  custom_name: string
-  supported_name: string
-  advance_rate: number
-  is_active: boolean
+  name: string
+  supported_name: string | null
+  advance_rate: number | null
+  active: boolean | null
+  sort_order: number | null
 }
 
 const SUPPORTED_NAMES = [
@@ -296,17 +297,19 @@ export default function SettingsPage() {
   }
 
   async function loadCarriers() {
-    setLoadingCarriers(true)
-    const { data, error } = await supabase
-      .from('carriers')
-      .select('id,created_at,custom_name,supported_name,advance_rate,is_active')
-      .order('created_at', { ascending: false })
-      .limit(5000)
+  setLoadingCarriers(true)
 
-    if (error) setToast('Could not load carriers')
-    setCarriers((data || []) as CarrierRow[])
-    setLoadingCarriers(false)
-  }
+  const { data, error } = await supabase
+    .from('carriers')
+    .select('id,created_at,name,supported_name,advance_rate,active,sort_order')
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('name', { ascending: true })
+    .limit(5000)
+
+  if (error) setToast(`Could not load carriers: ${error.message}`)
+  setCarriers((data || []) as CarrierRow[])
+  setLoadingCarriers(false)
+}
 
   async function loadCarrierStats() {
     const { data: deals } = await supabase.from('deals').select('id,company').limit(50000)
@@ -330,7 +333,7 @@ export default function SettingsPage() {
     const q = carrierSearch.trim().toLowerCase()
     if (!q) return carriers
     return carriers.filter((c) => {
-      const b = [c.custom_name, c.supported_name].join(' ').toLowerCase()
+      const b = [c.name, c.supported_name].join(' ').toLowerCase()
       return b.includes(q)
     })
   }, [carriers, carrierSearch])
@@ -346,7 +349,7 @@ export default function SettingsPage() {
       custom_name: custom,
       supported_name: supported,
       advance_rate: adv,
-      is_active: true,
+      active: true,
     })
 
     if (error) return setToast('Create failed (RLS?)')
@@ -711,7 +714,7 @@ export default function SettingsPage() {
                       onClick={() => (window.location.href = `/settings/carriers/${c.id}`)}
                       className="w-full text-left grid grid-cols-12 px-4 py-3 border-b border-white/10 hover:bg-white/5 transition text-sm"
                     >
-                      <div className="col-span-3 font-semibold">{c.custom_name}</div>
+                      <div className="col-span-3 font-semibold">{c.name}</div>
                       <div className="col-span-3 text-white/80">{c.supported_name}</div>
                       <div className="col-span-2 text-center">{policies}</div>
                       <div className="col-span-2 text-center">{products}</div>
