@@ -1,4 +1,3 @@
-// ✅ REPLACE ENTIRE FILE: /app/settings/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -11,7 +10,7 @@ type Profile = {
   email: string | null
   first_name: string | null
   last_name: string | null
-  role: string // 'agent' | 'admin'
+  role: string
   is_agency_owner: boolean
   upline_id?: string | null
   comp?: number | null
@@ -24,9 +23,9 @@ type CarrierRow = {
   created_at: string
   name: string
   supported_name: string | null
-  advance_rate: number | null
-  active: boolean | null
-  sort_order: number | null
+  advance_rate: number
+  active: boolean
+  sort_order: number
   eapp_url: string | null
   portal_url: string | null
   support_phone: string | null
@@ -82,7 +81,7 @@ export default function SettingsPage() {
   const [pFirst, setPFirst] = useState('')
   const [pLast, setPLast] = useState('')
   const [pEmail, setPEmail] = useState('')
-  const [avatarPreview, setAvatarPreview] = useState('')
+  const [avatarPreview, setAvatarPreview] = useState<string>('')
 
   const [savingProfile, setSavingProfile] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
@@ -103,6 +102,20 @@ export default function SettingsPage() {
     comp: 70,
     role: 'agent',
     is_agency_owner: false,
+    theme: 'blue',
+  })
+
+  // Edit modal
+  const [editOpen, setEditOpen] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editTarget, setEditTarget] = useState<Profile | null>(null)
+  const [edit, setEdit] = useState({
+    first_name: '',
+    last_name: '',
+    role: 'agent',
+    is_agency_owner: false,
+    comp: 70,
+    upline_id: '',
     theme: 'blue',
   })
 
@@ -127,7 +140,7 @@ export default function SettingsPage() {
     name: '',
     supported_name: '',
     advance_rate: '0.75',
-    sort_order: '',
+    sort_order: '', // REQUIRED in DB (not-null)
     active: true,
     eapp_url: '',
     portal_url: '',
@@ -143,12 +156,6 @@ export default function SettingsPage() {
     boot()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  async function authHeader() {
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token
-    return token ? `Bearer ${token}` : ''
-  }
 
   async function boot() {
     setBooting(true)
@@ -167,16 +174,18 @@ export default function SettingsPage() {
         .select('id,created_at,email,first_name,last_name,role,is_agency_owner,upline_id,comp,theme,avatar_url')
         .eq('id', uid)
         .single()
-      if (profErr) throw profErr
 
+      if (profErr) throw profErr
       const p = prof as Profile
       setMe(p)
+
       setPFirst(p.first_name || '')
       setPLast(p.last_name || '')
       setPEmail(p.email || '')
       setAvatarPreview(p.avatar_url || '')
 
-      if (p.role === 'admin' || !!p.is_agency_owner) {
+      const canAgents = p.role === 'admin' || !!p.is_agency_owner
+      if (canAgents) {
         await loadAgents()
         setTab('agents')
       } else {
@@ -191,6 +200,12 @@ export default function SettingsPage() {
     } finally {
       setBooting(false)
     }
+  }
+
+  async function authHeader() {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return token ? `Bearer ${token}` : ''
   }
 
   async function logout() {
@@ -251,8 +266,8 @@ export default function SettingsPage() {
     const q = agentSearch.trim().toLowerCase()
     if (!q) return agents
     return agents.filter((a) => {
-      const blob = [a.first_name, a.last_name, a.email].filter(Boolean).join(' ').toLowerCase()
-      return blob.includes(q)
+      const b = [a.first_name, a.last_name, a.email].filter(Boolean).join(' ').toLowerCase()
+      return b.includes(q)
     })
   }, [agents, agentSearch])
 
@@ -270,6 +285,50 @@ export default function SettingsPage() {
       }))
   }, [agents])
 
+  function openEdit(a: Profile) {
+    setEditTarget(a)
+    setEdit({
+      first_name: a.first_name || '',
+      last_name: a.last_name || '',
+      role: a.role || 'agent',
+      is_agency_owner: !!a.is_agency_owner,
+      comp: typeof a.comp === 'number' ? a.comp : 70,
+      upline_id: a.upline_id || '',
+      theme: a.theme || 'blue',
+    })
+    setEditOpen(true)
+  }
+
+  async function saveEdit() {
+    if (!editTarget) return
+    await run(setEditSaving, setToast, 'Agent updated', async () => {
+      const token = await authHeader()
+      if (!token) throw new Error('Not logged in')
+
+      const res = await fetch('/api/admin/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({
+          user_id: editTarget.id,
+          first_name: edit.first_name,
+          last_name: edit.last_name,
+          role: edit.role,
+          is_agency_owner: edit.is_agency_owner,
+          comp: edit.comp,
+          upline_id: edit.upline_id || null,
+          theme: edit.theme,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Update failed')
+
+      setEditOpen(false)
+      setEditTarget(null)
+      await loadAgents()
+    })
+  }
+
   async function inviteAgent() {
     await run(setInviting, setToast, 'Invite sent', async () => {
       const token = await authHeader()
@@ -282,8 +341,8 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json', Authorization: token },
         body: JSON.stringify({
           email: invite.email.trim(),
-          first_name: invite.first_name.trim(),
-          last_name: invite.last_name.trim(),
+          first_name: invite.first_name.trim() || null,
+          last_name: invite.last_name.trim() || null,
           upline_id: invite.upline_id || null,
           comp: invite.comp,
           role: invite.role,
@@ -291,6 +350,7 @@ export default function SettingsPage() {
           theme: invite.theme,
         }),
       })
+
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Invite failed')
 
@@ -325,6 +385,7 @@ export default function SettingsPage() {
           effective_date: pos.effective_date || null,
         }),
       })
+
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Update failed')
 
@@ -339,7 +400,7 @@ export default function SettingsPage() {
       const { data, error } = await supabase
         .from('carriers')
         .select('id,created_at,name,supported_name,advance_rate,active,sort_order,eapp_url,portal_url,support_phone,logo_url')
-        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('sort_order', { ascending: true })
         .order('name', { ascending: true })
         .limit(5000)
 
@@ -357,60 +418,58 @@ export default function SettingsPage() {
     const q = carrierSearch.trim().toLowerCase()
     if (!q) return carriers
     return carriers.filter((c) => {
-      const blob = [c.name, c.supported_name].filter(Boolean).join(' ').toLowerCase()
-      return blob.includes(q)
+      const b = [c.name, c.supported_name].filter(Boolean).join(' ').toLowerCase()
+      return b.includes(q)
     })
   }, [carriers, carrierSearch])
 
   async function createCarrier() {
-  await run(setCreatingCarrier, setToast, 'Carrier created', async () => {
-    const name = newCarrier.name.trim()
-    if (!name) throw new Error('Carrier name required')
+    await run(setCreatingCarrier, setToast, 'Carrier created', async () => {
+      const name = newCarrier.name.trim()
+      if (!name) throw new Error('Carrier name required')
 
-    const adv = Number(newCarrier.advance_rate)
-    if (!Number.isFinite(adv) || adv <= 0) throw new Error('Advance rate invalid')
+      const adv = Number(newCarrier.advance_rate)
+      if (!Number.isFinite(adv) || adv <= 0) throw new Error('Advance rate invalid')
 
-    // ✅ sort_order is NOT NULL in your DB, so never send null
-    const sort = newCarrier.sort_order.trim() ? Number(newCarrier.sort_order.trim()) : 999
-    if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
+      // ✅ DB requires NOT NULL sort_order
+      const sort = newCarrier.sort_order.trim() ? Number(newCarrier.sort_order.trim()) : 999
+      if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
 
-    const payload = {
-      name,
-      supported_name: newCarrier.supported_name.trim() || null,
-      advance_rate: adv,
-      active: !!newCarrier.active,
-      sort_order: sort, // ✅ never null
-      eapp_url: newCarrier.eapp_url.trim() || null,
-      portal_url: newCarrier.portal_url.trim() || null,
-      support_phone: newCarrier.support_phone.trim() || null,
-      logo_url: newCarrier.logo_url.trim() || null,
-    }
+      const payload = {
+        name,
+        supported_name: newCarrier.supported_name.trim() || null,
+        advance_rate: adv,
+        active: !!newCarrier.active,
+        sort_order: sort,
+        eapp_url: newCarrier.eapp_url.trim() || null,
+        portal_url: newCarrier.portal_url.trim() || null,
+        support_phone: newCarrier.support_phone.trim() || null,
+        logo_url: newCarrier.logo_url.trim() || null,
+      }
 
-    const { error } = await supabase.from('carriers').insert(payload)
-    if (error) throw error
+      const { error } = await supabase.from('carriers').insert(payload)
+      if (error) throw error
 
-    setCreateOpen(false)
-    setNewCarrier({
-      name: '',
-      supported_name: '',
-      advance_rate: '0.75',
-      sort_order: '',
-      active: true,
-      eapp_url: '',
-      portal_url: '',
-      support_phone: '',
-      logo_url: '',
+      setCreateOpen(false)
+      setNewCarrier({
+        name: '',
+        supported_name: '',
+        advance_rate: '0.75',
+        sort_order: '',
+        active: true,
+        eapp_url: '',
+        portal_url: '',
+        support_phone: '',
+        logo_url: '',
+      })
+      await loadCarriers()
     })
-
-    await loadCarriers()
-  })
-}
+  }
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
 
-      {/* TOAST */}
       {toast && (
         <div className="fixed top-5 right-5 z-50">
           <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
@@ -424,12 +483,102 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* EDIT MODAL */}
+      {editOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-xl glass rounded-2xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <div className="text-sm font-semibold">Edit Agent</div>
+                <div className="text-xs text-white/55 mt-1">
+                  {editTarget?.email || '—'}
+                </div>
+              </div>
+              <button onClick={() => setEditOpen(false)} className={btnGlass}>
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="First Name">
+                <input className={inputCls} value={edit.first_name} onChange={(e) => setEdit((p) => ({ ...p, first_name: e.target.value }))} />
+              </Field>
+
+              <Field label="Last Name">
+                <input className={inputCls} value={edit.last_name} onChange={(e) => setEdit((p) => ({ ...p, last_name: e.target.value }))} />
+              </Field>
+
+              <Field label="Role">
+                <select className={inputCls} value={edit.role} onChange={(e) => setEdit((p) => ({ ...p, role: e.target.value }))}>
+                  <option value="agent">agent</option>
+                  <option value="admin">admin</option>
+                </select>
+              </Field>
+
+              <Field label="Agency Owner">
+                <select
+                  className={inputCls}
+                  value={edit.is_agency_owner ? 'yes' : 'no'}
+                  onChange={(e) => setEdit((p) => ({ ...p, is_agency_owner: e.target.value === 'yes' }))}
+                >
+                  <option value="no">no</option>
+                  <option value="yes">yes</option>
+                </select>
+              </Field>
+
+              <Field label="Comp">
+                <select className={inputCls} value={String(edit.comp)} onChange={(e) => setEdit((p) => ({ ...p, comp: Number(e.target.value) }))}>
+                  {COMP_VALUES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}%
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Upline">
+                <select
+                  className={inputCls}
+                  value={edit.upline_id}
+                  onChange={(e) => setEdit((p) => ({ ...p, upline_id: e.target.value }))}
+                >
+                  <option value="">select</option>
+                  {uplineOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Theme">
+                <select className={inputCls} value={edit.theme} onChange={(e) => setEdit((p) => ({ ...p, theme: e.target.value }))}>
+                  {THEMES.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <button
+              onClick={saveEdit}
+              disabled={editSaving}
+              className={saveWide + (editSaving ? ' opacity-50 cursor-not-allowed' : '')}
+            >
+              {editSaving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="ml-64 px-10 py-10">
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
             <p className="text-sm text-white/60 mt-1">
-              Profile{canManageAgents ? ' + Agent Management + Positions' : ''}{isAdmin ? ' + Carrier Config' : ''}
+              Profile{canManageAgents ? ' + Agents + Positions' : ''}{isAdmin ? ' + Carriers' : ''}
             </p>
             {booting && <div className="text-xs text-white/45 mt-2">Loading settings…</div>}
           </div>
@@ -500,9 +649,6 @@ export default function SettingsPage() {
                     }}
                     disabled={uploadingAvatar}
                   />
-                  <div className="text-[11px] text-white/55 mt-2">
-                    Uploads to Supabase Storage bucket: <b>avatars</b>
-                  </div>
                 </div>
               </Field>
             </div>
@@ -511,19 +657,11 @@ export default function SettingsPage() {
               <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center gap-4">
                 <div className="text-xs text-white/60">Preview</div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarPreview}
-                  alt="avatar"
-                  className="h-12 w-12 rounded-2xl border border-white/10 object-cover"
-                />
+                <img src={avatarPreview} alt="avatar" className="h-12 w-12 rounded-2xl border border-white/10 object-cover" />
               </div>
             )}
 
-            <button
-              onClick={saveProfile}
-              disabled={savingProfile}
-              className={saveWide + (savingProfile ? ' opacity-50 cursor-not-allowed' : '')}
-            >
+            <button onClick={saveProfile} disabled={savingProfile} className={saveWide + (savingProfile ? ' opacity-50 cursor-not-allowed' : '')}>
               {savingProfile ? 'Saving…' : 'Save Profile'}
             </button>
           </div>
@@ -535,7 +673,7 @@ export default function SettingsPage() {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Agents</div>
-                <div className="text-xs text-white/55 mt-1">Invite users + view roster. Buttons execute instantly.</div>
+                <div className="text-xs text-white/55 mt-1">Invite users + view roster.</div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -598,14 +736,12 @@ export default function SettingsPage() {
 
                       <div className="col-span-4 text-white/75">{a.email || '—'}</div>
                       <div className="col-span-2 text-center text-white/70">{a.role || 'agent'}</div>
-                      <div className="col-span-2 text-right text-white/80">
-                        {typeof a.comp === 'number' ? `${a.comp}%` : '—'}
-                      </div>
+                      <div className="col-span-2 text-right text-white/80">{typeof a.comp === 'number' ? `${a.comp}%` : '—'}</div>
 
                       <div className="col-span-1 flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => setToast('Edit UI next (modal + save route)')}
+                          onClick={() => openEdit(a)}
                           className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-2 py-2"
                           title="Edit"
                         >
@@ -642,10 +778,124 @@ export default function SettingsPage() {
                   )
                 })}
 
-              {!loadingAgents && filteredAgents.length === 0 && (
-                <div className="px-4 py-6 text-sm text-white/60">No agents.</div>
-              )}
+              {!loadingAgents && filteredAgents.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No agents.</div>}
             </div>
+
+            {/* INVITE MODAL */}
+            {inviteOpen && (
+              <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 px-4">
+                <div className="w-full max-w-xl glass rounded-2xl border border-white/10 p-6">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <div className="text-sm font-semibold">Invite Agent</div>
+                      <div className="text-xs text-white/55 mt-1">Creates user + sends invite link.</div>
+                    </div>
+                    <button onClick={() => setInviteOpen(false)} className={btnGlass}>
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="First Name">
+                      <input
+                        className={inputCls}
+                        value={invite.first_name}
+                        onChange={(e) => setInvite((p) => ({ ...p, first_name: e.target.value }))}
+                      />
+                    </Field>
+
+                    <Field label="Last Name">
+                      <input
+                        className={inputCls}
+                        value={invite.last_name}
+                        onChange={(e) => setInvite((p) => ({ ...p, last_name: e.target.value }))}
+                      />
+                    </Field>
+
+                    <Field label="Email">
+                      <input
+                        className={inputCls}
+                        value={invite.email}
+                        onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))}
+                      />
+                    </Field>
+
+                    <Field label="Role">
+                      <select
+                        className={inputCls}
+                        value={invite.role}
+                        onChange={(e) => setInvite((p) => ({ ...p, role: e.target.value }))}
+                      >
+                        <option value="agent">agent</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </Field>
+
+                    <Field label="Agency Owner">
+                      <select
+                        className={inputCls}
+                        value={invite.is_agency_owner ? 'yes' : 'no'}
+                        onChange={(e) => setInvite((p) => ({ ...p, is_agency_owner: e.target.value === 'yes' }))}
+                      >
+                        <option value="no">no</option>
+                        <option value="yes">yes</option>
+                      </select>
+                    </Field>
+
+                    <Field label="Comp">
+                      <select
+                        className={inputCls}
+                        value={String(invite.comp)}
+                        onChange={(e) => setInvite((p) => ({ ...p, comp: Number(e.target.value) }))}
+                      >
+                        {COMP_VALUES.map((n) => (
+                          <option key={n} value={n}>
+                            {n}%
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Upline">
+                      <select
+                        className={inputCls}
+                        value={invite.upline_id}
+                        onChange={(e) => setInvite((p) => ({ ...p, upline_id: e.target.value }))}
+                      >
+                        <option value="">select</option>
+                        {uplineOptions.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Theme">
+                      <select
+                        className={inputCls}
+                        value={invite.theme}
+                        onChange={(e) => setInvite((p) => ({ ...p, theme: e.target.value }))}
+                      >
+                        {THEMES.map((t) => (
+                          <option key={t.key} value={t.key}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+
+                  <button
+                    onClick={inviteAgent}
+                    disabled={inviting}
+                    className={saveWide + (inviting ? ' opacity-50 cursor-not-allowed' : '')}
+                  >
+                    {inviting ? 'Sending…' : 'Send Invite'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -657,12 +907,8 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
               <Field label="Select User">
-                <select
-                  className={inputCls}
-                  value={pos.user_id}
-                  onChange={(e) => setPos((p) => ({ ...p, user_id: e.target.value }))}
-                >
-                  <option value="">Select</option>
+                <select className={inputCls} value={pos.user_id} onChange={(e) => setPos((p) => ({ ...p, user_id: e.target.value }))}>
+                  <option value="">select</option>
                   {uplineOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.label}
@@ -672,12 +918,8 @@ export default function SettingsPage() {
               </Field>
 
               <Field label="Upline">
-                <select
-                  className={inputCls}
-                  value={pos.upline_id}
-                  onChange={(e) => setPos((p) => ({ ...p, upline_id: e.target.value }))}
-                >
-                  <option value="">None</option>
+                <select className={inputCls} value={pos.upline_id} onChange={(e) => setPos((p) => ({ ...p, upline_id: e.target.value }))}>
+                  <option value="">select</option>
                   {uplineOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.label}
@@ -687,42 +929,27 @@ export default function SettingsPage() {
               </Field>
 
               <Field label="Comp">
-                <select
-                  className={inputCls}
-                  value={pos.comp}
-                  onChange={(e) => setPos((p) => ({ ...p, comp: Number(e.target.value) }))}
-                >
-                  {COMP_VALUES.map((v) => (
-                    <option key={v} value={v}>
-                      {v}%
+                <select className={inputCls} value={String(pos.comp)} onChange={(e) => setPos((p) => ({ ...p, comp: Number(e.target.value) }))}>
+                  {COMP_VALUES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}%
                     </option>
                   ))}
                 </select>
               </Field>
 
-              <Field label="Effective Date (optional)" className="md:col-span-1">
-                <input
-                  type="date"
-                  className={inputCls}
-                  value={pos.effective_date}
-                  onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))}
-                />
+              <Field label="Effective Date (optional)">
+                <input className={inputCls} value={pos.effective_date} onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))} placeholder="YYYY-MM-DD" />
               </Field>
-
-              <div className="md:col-span-2 flex items-end">
-                <button
-                  onClick={updatePosition}
-                  disabled={savingPosition}
-                  className={saveWide + (savingPosition ? ' opacity-50 cursor-not-allowed' : '')}
-                >
-                  {savingPosition ? 'Saving…' : 'Save Position'}
-                </button>
-              </div>
             </div>
 
-            <div className="mt-5 text-xs text-white/45">
-              Tip: Select user → pick upline + comp → save. Executes immediately.
-            </div>
+            <button
+              onClick={updatePosition}
+              disabled={savingPosition}
+              className={saveWide + (savingPosition ? ' opacity-50 cursor-not-allowed' : '')}
+            >
+              {savingPosition ? 'Saving…' : 'Save Position'}
+            </button>
           </div>
         )}
 
@@ -732,13 +959,14 @@ export default function SettingsPage() {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Carriers</div>
-                <div className="text-xs text-white/55 mt-1">Config + links. (Admin only.)</div>
+                <div className="text-xs text-white/55 mt-1">Create and maintain carrier records. (Sort order required.)</div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button onClick={() => setCreateOpen(true)} className={saveBtn}>
                   Add Carrier
                 </button>
+
                 <button
                   onClick={() =>
                     run(setRefreshingCarriers, setToast, 'Carriers refreshed', async () => {
@@ -768,259 +996,129 @@ export default function SettingsPage() {
               <div className="rounded-2xl border border-white/10 overflow-hidden">
                 <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
                   <div className="col-span-3">Carrier</div>
-                  <div className="col-span-2">Advance</div>
-                  <div className="col-span-2">Status</div>
-                  <div className="col-span-2">E-App</div>
-                  <div className="col-span-2">Portal</div>
-                  <div className="col-span-1 text-right">Phone</div>
+                  <div className="col-span-2">Supported</div>
+                  <div className="col-span-2 text-right">Advance</div>
+                  <div className="col-span-2 text-right">Sort</div>
+                  <div className="col-span-3 text-right">Links</div>
                 </div>
 
                 {filteredCarriers.map((c) => (
                   <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
-                    <div className="col-span-3 font-semibold">
-                      {c.name}
-                      {c.supported_name ? <span className="text-xs text-white/50"> • {c.supported_name}</span> : null}
-                    </div>
-
-                    <div className="col-span-2 text-white/80">{c.advance_rate ?? '—'}</div>
-
-                    <div className="col-span-2">
-                      <span className="text-[11px] px-2 py-1 rounded-xl border border-white/10 bg-white/5 text-white/70">
-                        {c.active === false ? 'inactive' : 'active'}
-                      </span>
-                    </div>
-
-                    <div className="col-span-2">
+                    <div className="col-span-3 font-semibold">{c.name}</div>
+                    <div className="col-span-2 text-white/70">{c.supported_name || '—'}</div>
+                    <div className="col-span-2 text-right text-white/80">{Number(c.advance_rate || 0).toFixed(2)}</div>
+                    <div className="col-span-2 text-right text-white/70">{c.sort_order}</div>
+                    <div className="col-span-3 text-right text-xs text-white/70">
                       {c.eapp_url ? (
-                        <a className="text-white/80 hover:text-white underline" href={c.eapp_url} target="_blank" rel="noreferrer">
-                          Open ↗
+                        <a className="hover:text-white underline" href={c.eapp_url} target="_blank" rel="noreferrer">
+                          Eapp
                         </a>
                       ) : (
-                        <span className="text-white/40">—</span>
+                        '—'
                       )}
-                    </div>
-
-                    <div className="col-span-2">
                       {c.portal_url ? (
-                        <a className="text-white/80 hover:text-white underline" href={c.portal_url} target="_blank" rel="noreferrer">
-                          Open ↗
-                        </a>
-                      ) : (
-                        <span className="text-white/40">—</span>
-                      )}
+                        <>
+                          {' '}
+                          •{' '}
+                          <a className="hover:text-white underline" href={c.portal_url} target="_blank" rel="noreferrer">
+                            Portal
+                          </a>
+                        </>
+                      ) : null}
                     </div>
-
-                    <div className="col-span-1 text-right text-white/70">{c.support_phone || '—'}</div>
                   </div>
                 ))}
 
                 {filteredCarriers.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No carriers.</div>}
               </div>
             )}
+
+            {/* CREATE CARRIER MODAL */}
+            {createOpen && (
+              <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60 px-4">
+                <div className="w-full max-w-2xl glass rounded-2xl border border-white/10 p-6">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <div className="text-sm font-semibold">Add Carrier</div>
+                      <div className="text-xs text-white/55 mt-1">Sort order is required (DB constraint).</div>
+                    </div>
+                    <button onClick={() => setCreateOpen(false)} className={btnGlass}>
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="Name">
+                      <input className={inputCls} value={newCarrier.name} onChange={(e) => setNewCarrier((p) => ({ ...p, name: e.target.value }))} />
+                    </Field>
+
+                    <Field label="Supported Name">
+                      <input className={inputCls} value={newCarrier.supported_name} onChange={(e) => setNewCarrier((p) => ({ ...p, supported_name: e.target.value }))} />
+                    </Field>
+
+                    <Field label="Advance Rate">
+                      <input className={inputCls} value={newCarrier.advance_rate} onChange={(e) => setNewCarrier((p) => ({ ...p, advance_rate: e.target.value }))} placeholder="0.75" />
+                    </Field>
+
+                    <Field label="Sort Order (required)">
+                      <input className={inputCls} value={newCarrier.sort_order} onChange={(e) => setNewCarrier((p) => ({ ...p, sort_order: e.target.value }))} placeholder="10" />
+                    </Field>
+
+                    <Field label="E-App URL">
+                      <input className={inputCls} value={newCarrier.eapp_url} onChange={(e) => setNewCarrier((p) => ({ ...p, eapp_url: e.target.value }))} />
+                    </Field>
+
+                    <Field label="Portal URL">
+                      <input className={inputCls} value={newCarrier.portal_url} onChange={(e) => setNewCarrier((p) => ({ ...p, portal_url: e.target.value }))} />
+                    </Field>
+
+                    <Field label="Support Phone">
+                      <input className={inputCls} value={newCarrier.support_phone} onChange={(e) => setNewCarrier((p) => ({ ...p, support_phone: e.target.value }))} />
+                    </Field>
+
+                    <Field label="Logo URL">
+                      <input className={inputCls} value={newCarrier.logo_url} onChange={(e) => setNewCarrier((p) => ({ ...p, logo_url: e.target.value }))} />
+                    </Field>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <label className="flex items-center gap-2 text-sm text-white/70">
+                      <input
+                        type="checkbox"
+                        checked={newCarrier.active}
+                        onChange={(e) => setNewCarrier((p) => ({ ...p, active: e.target.checked }))}
+                      />
+                      Active
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={createCarrier}
+                    disabled={creatingCarrier}
+                    className={saveWide + (creatingCarrier ? ' opacity-50 cursor-not-allowed' : '')}
+                  >
+                    {creatingCarrier ? 'Creating…' : 'Create Carrier'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
-
-      {/* INVITE MODAL */}
-      {inviteOpen && (
-        <Modal title="Invite Agent" onClose={() => setInviteOpen(false)}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="First Name">
-              <input
-                className={inputCls}
-                value={invite.first_name}
-                onChange={(e) => setInvite((x) => ({ ...x, first_name: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Last Name">
-              <input
-                className={inputCls}
-                value={invite.last_name}
-                onChange={(e) => setInvite((x) => ({ ...x, last_name: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Email" className="md:col-span-2">
-              <input
-                className={inputCls}
-                value={invite.email}
-                onChange={(e) => setInvite((x) => ({ ...x, email: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Role">
-              <select
-                className={inputCls}
-                value={invite.role}
-                onChange={(e) => setInvite((x) => ({ ...x, role: e.target.value }))}
-              >
-                <option value="agent">Agent</option>
-                <option value="admin">Admin</option>
-              </select>
-            </Field>
-
-            <Field label="Comp">
-              <select
-                className={inputCls}
-                value={invite.comp}
-                onChange={(e) => setInvite((x) => ({ ...x, comp: Number(e.target.value) }))}
-              >
-                {COMP_VALUES.map((v) => (
-                  <option key={v} value={v}>
-                    {v}%
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Upline" className="md:col-span-2">
-              <select
-                className={inputCls}
-                value={invite.upline_id}
-                onChange={(e) => setInvite((x) => ({ ...x, upline_id: e.target.value }))}
-              >
-                <option value="">None</option>
-                {uplineOptions.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Theme" className="md:col-span-2">
-              <select
-                className={inputCls}
-                value={invite.theme}
-                onChange={(e) => setInvite((x) => ({ ...x, theme: e.target.value }))}
-              >
-                {THEMES.map((t) => (
-                  <option key={t.key} value={t.key}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <div className="md:col-span-2 flex items-center gap-3">
-              <input
-                id="owner"
-                type="checkbox"
-                checked={invite.is_agency_owner}
-                onChange={(e) => setInvite((x) => ({ ...x, is_agency_owner: e.target.checked }))}
-              />
-              <label htmlFor="owner" className="text-sm text-white/80">
-                Agency Owner
-              </label>
-            </div>
-          </div>
-
-          <button
-            onClick={inviteAgent}
-            disabled={inviting}
-            className={saveWide + (inviting ? ' opacity-50 cursor-not-allowed' : '')}
-          >
-            {inviting ? 'Sending…' : 'Send Invite'}
-          </button>
-        </Modal>
-      )}
-
-      {/* CREATE CARRIER MODAL */}
-      {createOpen && (
-        <Modal title="Add Carrier" onClose={() => setCreateOpen(false)}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Name">
-              <input
-                className={inputCls}
-                value={newCarrier.name}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, name: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Supported Name (optional)">
-              <input
-                className={inputCls}
-                value={newCarrier.supported_name}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, supported_name: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Advance Rate (e.g. 0.75)">
-              <input
-                className={inputCls}
-                value={newCarrier.advance_rate}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, advance_rate: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Sort Order (optional)">
-              <input
-                className={inputCls}
-                value={newCarrier.sort_order}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, sort_order: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="E-App URL" className="md:col-span-2">
-              <input
-                className={inputCls}
-                value={newCarrier.eapp_url}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, eapp_url: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Portal URL" className="md:col-span-2">
-              <input
-                className={inputCls}
-                value={newCarrier.portal_url}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, portal_url: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Support Phone" className="md:col-span-1">
-              <input
-                className={inputCls}
-                value={newCarrier.support_phone}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, support_phone: e.target.value }))}
-              />
-            </Field>
-
-            <Field label="Logo URL (optional)" className="md:col-span-1">
-              <input
-                className={inputCls}
-                value={newCarrier.logo_url}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, logo_url: e.target.value }))}
-              />
-            </Field>
-
-            <div className="md:col-span-2 flex items-center gap-3">
-              <input
-                id="activeCarrier"
-                type="checkbox"
-                checked={newCarrier.active}
-                onChange={(e) => setNewCarrier((x) => ({ ...x, active: e.target.checked }))}
-              />
-              <label htmlFor="activeCarrier" className="text-sm text-white/80">
-                Active
-              </label>
-            </div>
-          </div>
-
-          <button
-            onClick={createCarrier}
-            disabled={creatingCarrier}
-            className={saveWide + (creatingCarrier ? ' opacity-50 cursor-not-allowed' : '')}
-          >
-            {creatingCarrier ? 'Creating…' : 'Create Carrier'}
-          </button>
-        </Modal>
-      )}
     </div>
   )
 }
 
-/* ---------------- Components ---------------- */
+/* ---------- UI bits ---------- */
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      {children}
+    </div>
+  )
+}
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -1030,50 +1128,11 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
         'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
         active ? 'border-white/20 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10',
       ].join(' ')}
-      type="button"
     >
       {children}
     </button>
   )
 }
-
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div className={className || ''}>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
-      {children}
-    </div>
-  )
-}
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-[9999]">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="absolute left-1/2 top-1/2 w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2">
-        <div className="glass rounded-2xl border border-white/10 p-6 shadow-2xl">
-          <div className="flex items-center justify-between gap-3 mb-5">
-            <div className="text-sm font-semibold">{title}</div>
-            <button className={btnGlass} onClick={onClose} type="button">
-              Close
-            </button>
-          </div>
-          {children}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ---------------- Styles ---------------- */
 
 const inputCls =
   'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
@@ -1084,10 +1143,10 @@ const btnGlass =
 const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
 
 const saveBtn =
-  'rounded-2xl bg-blue-600 hover:bg-blue-500 transition px-4 py-2 text-sm font-semibold border border-white/10'
+  'rounded-2xl bg-blue-600 hover:bg-blue-500 transition px-4 py-2 text-sm font-semibold'
 
 const saveWide =
-  'mt-5 w-full rounded-2xl bg-blue-600 hover:bg-blue-500 transition px-4 py-3 text-sm font-semibold border border-white/10'
+  'mt-5 w-full rounded-2xl bg-blue-600 hover:bg-blue-500 transition px-4 py-3 text-sm font-semibold'
 
 const dangerBtn =
   'rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-2 text-sm font-semibold hover:bg-red-500/15 transition'
