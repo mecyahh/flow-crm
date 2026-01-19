@@ -428,3 +428,8 @@ function toPremium(p: any) {
       : Number(p || 0)
   return Number.isFinite(n) ? n : 0
 }
+
+function formatMoney(n: number) {
+  const num = Number(n || 0)
+  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
