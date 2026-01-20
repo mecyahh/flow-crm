@@ -33,10 +33,7 @@ type Licenses = {
 }
 
 // ✅ FALLBACK LINKS (if DB fields are null)
-const CARRIER_FALLBACKS: Record<
-  string,
-  { eapp_url: string; portal_url: string; support_phone: string }
-> = {
+const CARRIER_FALLBACKS: Record<string, { eapp_url: string; portal_url: string; support_phone: string }> = {
   Aetna: {
     eapp_url:
       'https://www.aetna.com/aimmanageaccount/login?identityTransaction=t13%2Ba1aJXqkNmE71XgKjOqjV36ynh%2FoXVgtzAfDFlZSv8UHvqfKyV%2FHC5MFnx%2B%2F9oGOoUr8fJYaTxzLNDRU8AeTUMwDdO802qgyvz8XeOlaVL1I5jUg2Tv1f0%2FG4qdYf%2F6kYfN0O1kttxLLCnWCFsIvEGkcxNqHX%2BEbcbyydLwMM2eNb2JyxeUCK3mVaDrBzqQnEL8wDWUPUsnuJg9bzZBQVK4NhZUahh9H6Nnp%2B4wF3c5HWvBoTUwZEaCGgvKkmiKUplTTrxC2FVjDf8RnuwfuPG4CrlaETukIZDeoMj7Kvewx%2BbnLQye55QI7Yk1oXVCokQZcwL1%2BaKHnuCJoNK%2FK5DceKwfp%2FPtuCH6Uq%2FLQIqAJVRcDsCChEPIzFJPqYiUkAf8xfer9fFNrf2GasjrRW%2Bdg9pK2qeEbtUUL5FTDEwkDFlybpxYV%2FG%2BSX44cb3MnVXkgLQ4%2BnfSMp7uvruLcQnQmeuhx4oAXvCJLILltNOy1dL%2Fz0GgmvVcYgqn3pEcqO%2B0dKe4sQpq0IPPIlXJV2lkDLw%2BEQvxoqxz6KxUdMaTzTMMmmeRWzJAd18I5X1g4zHO21bSFlT%2BHWURyoh45%2FPgYZNwLjpBq2VTyf2QY9OIEwpoSt1QsPziGxjpGHVLmyDtEYdhc1Y8TNt2JjEQ%3D%3D&appname=SSIBroker&branding=aetna&skin=&language=&channel=web&psuid=&biometric_text=&businessdata=channel~aetna|subchannel~broker&business_event=Login',
@@ -206,7 +203,6 @@ export default function CarrierOutlinePage() {
 
   async function saveLicenses() {
     setSavingLicenses(true)
-
     try {
       const userRes = await supabase.auth.getUser()
       const uid = userRes.data.user?.id
@@ -294,12 +290,12 @@ export default function CarrierOutlinePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -314,11 +310,11 @@ export default function CarrierOutlinePage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Carrier Outline</h1>
-            <p className="text-sm text-white/60 mt-1">Producer numbers + logins + quick links.</p>
+            <p className="text-sm text-[var(--muted)] mt-1">Producer numbers + logins + quick links.</p>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2">
+            <div className="glass rounded-2xl border border-[var(--border)] px-3 py-2 flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path
                   d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm6.5 1 4-4"
@@ -328,7 +324,7 @@ export default function CarrierOutlinePage() {
                 />
               </svg>
               <input
-                className="bg-transparent outline-none text-sm w-56 placeholder:text-white/40"
+                className="bg-transparent outline-none text-sm w-56 placeholder:text-[var(--muted2)]"
                 placeholder="Search carriers…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -346,7 +342,7 @@ export default function CarrierOutlinePage() {
         </div>
 
         {/* LICENSES TOP */}
-        <div className="glass rounded-2xl border border-white/10 p-6 mb-6">
+        <div className="glass rounded-2xl border border-[var(--border)] p-6 mb-6">
           <div className="text-sm font-semibold mb-4">Licenses</div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -371,16 +367,12 @@ export default function CarrierOutlinePage() {
             </Field>
           </div>
 
-          <button
-            onClick={saveLicenses}
-            disabled={savingLicenses}
-            className="mt-5 rounded-2xl bg-blue-600 hover:bg-blue-500 transition px-5 py-3 text-sm font-semibold disabled:opacity-50"
-          >
+          <button onClick={saveLicenses} disabled={savingLicenses} className={saveBtnWide}>
             {savingLicenses ? 'Saving…' : 'Save Licenses'}
           </button>
         </div>
 
-        {loading && <div className="text-white/60">Loading…</div>}
+        {loading && <div className="text-[var(--muted)]">Loading…</div>}
 
         {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -389,22 +381,21 @@ export default function CarrierOutlinePage() {
               const has = !!accounts[c.id]
               const isSaving = savingCarrier === c.id
 
-              // ✅ DB links first, fallback if missing
               const fb = pickFallback(c.name)
               const eapp = (c.eapp_url || fb?.eapp_url || null) as string | null
               const portal = (c.portal_url || fb?.portal_url || null) as string | null
               const phone = (c.support_phone || fb?.support_phone || null) as string | null
 
               return (
-                <div key={c.id} className="glass rounded-2xl border border-white/10 p-6">
+                <div key={c.id} className="glass rounded-2xl border border-[var(--border)] p-6">
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-3">
                         <div className="text-lg font-semibold truncate">{c.name}</div>
                         <StatusPill status={d?.status || 'active'} />
-                        {has && <span className="text-xs text-white/50">Saved</span>}
+                        {has && <span className="text-xs text-[var(--muted2)]">Saved</span>}
                       </div>
-                      <div className="text-xs text-white/55 mt-1">
+                      <div className="text-xs text-[var(--muted2)] mt-1">
                         Last updated: {has ? new Date(accounts[c.id].updated_at).toLocaleString() : '—'}
                       </div>
                     </div>
@@ -457,19 +448,15 @@ export default function CarrierOutlinePage() {
                   </div>
 
                   {/* E-App | Agent Portal, Phone below */}
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--panel2)] p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <LinkCard label="E-App" href={eapp} />
                       <LinkCard label="Agent Portal" href={portal} />
                     </div>
-                    <div className="mt-3 text-center text-sm text-white/80">{phone ? phone : '—'}</div>
+                    <div className="mt-3 text-center text-sm text-[var(--text)]">{phone ? phone : '—'}</div>
                   </div>
 
-                  <button
-                    onClick={() => saveCarrier(c.id)}
-                    disabled={isSaving}
-                    className="mt-5 w-full rounded-2xl bg-blue-600 hover:bg-blue-500 transition px-4 py-3 text-sm font-semibold disabled:opacity-50"
-                  >
+                  <button onClick={() => saveCarrier(c.id)} disabled={isSaving} className={saveBtnWide}>
                     {isSaving ? 'Saving…' : 'Save'}
                   </button>
                 </div>
@@ -482,10 +469,12 @@ export default function CarrierOutlinePage() {
   )
 }
 
+/* ---------- UI bits ---------- */
+
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={className || ''}>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--muted)] mb-2">{label}</div>
       {children}
     </div>
   )
@@ -511,8 +500,8 @@ function LinkCard({ label, href }: { label: string; href: string | null }) {
       className={[
         'rounded-2xl border px-4 py-3 text-sm font-semibold transition flex items-center justify-between',
         disabled
-          ? 'border-white/10 bg-white/5 text-white/40 pointer-events-none'
-          : 'border-white/10 bg-white/5 hover:bg-white/10 text-white/90',
+          ? 'border-[var(--border)] bg-[var(--panel2)] text-[var(--muted2)] pointer-events-none'
+          : 'border-[var(--border)] bg-[var(--panel2)] hover:bg-[var(--panel)] text-[var(--text)]',
       ].join(' ')}
     >
       <span>{label}</span>
@@ -522,7 +511,16 @@ function LinkCard({ label, href }: { label: string; href: string | null }) {
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
-const btnDanger = 'rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs hover:bg-red-500/15 transition'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel2)] px-4 py-3 text-sm outline-none text-[var(--text)] focus:border-[var(--border2)] focus:bg-[var(--panel)] placeholder:text-[var(--muted2)]'
+
+const btnGlass =
+  'glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel)] transition rounded-2xl border border-[var(--border)] text-[var(--text)]'
+
+const btnSoft =
+  'rounded-xl bg-[var(--panel2)] hover:bg-[var(--panel)] transition px-3 py-2 text-xs border border-[var(--border)] text-[var(--text)]'
+
+const btnDanger =
+  'rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs hover:bg-red-500/15 transition text-[var(--text)]'
+
+const saveBtnWide =
+  'mt-5 w-full rounded-2xl bg-[var(--accent)] hover:opacity-90 transition px-4 py-3 text-sm font-semibold text-[var(--accentText)] disabled:opacity-50'
