@@ -1,34 +1,169 @@
-:root{
-  --accent:#3b82f6;
-  --accent2:#60a5fa;
-  --accentText:#ffffff;
-  --card:rgba(255,255,255,0.05);
-  --cardBorder:rgba(255,255,255,0.10);
-  --glow:rgba(59,130,246,0.35);
-}
+/* ✅ REPLACE ENTIRE FILE: /app/globals.css */
 
-/* optional helpers if you want consistent theme usage */
-.glass{
-  background: var(--card);
-  border: 1px solid var(--cardBorder);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border-radius: 16px;
-}
-
+/* Tailwind layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  background-color: #0b0f1a;
-  color: white;
+/* =========================
+   FLOW THEME TOKENS (GLOBAL)
+   - Theme is controlled by: <html data-theme="blue|gold|green|red|mono|fuchsia|orange|bw">
+   - Keep your iOS glass look (same glass class), but colors shift platform-wide
+   ========================= */
+
+/* Default (Blue) */
+:root {
+  /* brand */
+  --accent: #3b82f6;   /* main */
+  --accent2: #2563eb;  /* hover/deeper */
+  --accentText: #ffffff;
+
+  /* surfaces */
+  --bg: #0b0f1a;
+  --card: rgba(255, 255, 255, 0.06);
+  --card2: rgba(255, 255, 255, 0.09);
+  --cardBorder: rgba(255, 255, 255, 0.10);
+
+  /* glow/ring */
+  --glow: rgba(59, 130, 246, 0.35);
+  --ring: rgba(59, 130, 246, 0.20);
+
+  /* text */
+  --text: rgba(255, 255, 255, 1);
+  --muted: rgba(255, 255, 255, 0.60);
+
+  /* status */
+  --good: rgba(34, 197, 94, 1);
+  --warn: rgba(234, 179, 8, 1);
+  --bad: rgba(239, 68, 68, 1);
 }
 
+/* =========================
+   THEME OVERRIDES
+   ========================= */
+
+html[data-theme='gold'] {
+  --accent: #f59e0b;
+  --accent2: #d97706;
+  --glow: rgba(245, 158, 11, 0.35);
+  --ring: rgba(245, 158, 11, 0.20);
+}
+
+html[data-theme='green'] {
+  --accent: #22c55e;
+  --accent2: #16a34a;
+  --glow: rgba(34, 197, 94, 0.35);
+  --ring: rgba(34, 197, 94, 0.20);
+}
+
+html[data-theme='red'] {
+  --accent: #ef4444;
+  --accent2: #dc2626;
+  --glow: rgba(239, 68, 68, 0.35);
+  --ring: rgba(239, 68, 68, 0.20);
+}
+
+html[data-theme='fuchsia'] {
+  --accent: #d946ef;
+  --accent2: #c026d3;
+  --glow: rgba(217, 70, 239, 0.35);
+  --ring: rgba(217, 70, 239, 0.20);
+}
+
+html[data-theme='orange'] {
+  --accent: #f97316;
+  --accent2: #ea580c;
+  --glow: rgba(249, 115, 22, 0.35);
+  --ring: rgba(249, 115, 22, 0.20);
+}
+
+html[data-theme='mono'] {
+  --accent: #ffffff;
+  --accent2: #ffffff;
+  --accentText: #0b0f1a;
+  --glow: rgba(255, 255, 255, 0.22);
+  --ring: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme='bw'] {
+  --bg: #ffffff;
+  --text: rgba(0, 0, 0, 1);
+  --muted: rgba(0, 0, 0, 0.60);
+  --card: rgba(0, 0, 0, 0.04);
+  --card2: rgba(0, 0, 0, 0.07);
+  --cardBorder: rgba(0, 0, 0, 0.10);
+
+  --accent: #111827;
+  --accent2: #000000;
+  --accentText: #ffffff;
+
+  --glow: rgba(17, 24, 39, 0.18);
+  --ring: rgba(17, 24, 39, 0.14);
+}
+
+/* =========================
+   BASE PAGE STYLES
+   ========================= */
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* =========================
+   GLASS (KEEP YOUR LOOK)
+   - NOTE: You had this twice. This is the single source of truth now.
+   ========================= */
 .glass {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--card);
+  border: 1px solid var(--cardBorder);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* =========================
+   FLOW HELPERS (OPTIONAL BUT RECOMMENDED)
+   Use these to get “big color change” everywhere with minimal edits.
+   ========================= */
+
+/* Primary button */
+.flow-btn {
+  background: var(--accent);
+  color: var(--accentText);
+}
+.flow-btn:hover {
+  background: var(--accent2);
+}
+
+/* Soft button / surface button */
+.flow-btn-soft {
+  background: var(--card);
+  border: 1px solid var(--cardBorder);
+  color: var(--text);
+}
+.flow-btn-soft:hover {
+  background: var(--card2);
+}
+
+/* Accent ring for inputs/active elements */
+.flow-ring:focus,
+.flow-ring:focus-within {
+  box-shadow: 0 0 0 1px var(--cardBorder), 0 0 0 3px var(--ring);
+}
+
+/* Accent text */
+.flow-accent {
+  color: var(--accent);
+}
+
+/* Accent glow (use for special cards) */
+.flow-glow {
+  box-shadow: 0 0 0 1px var(--cardBorder), 0 0 40px var(--glow);
 }
