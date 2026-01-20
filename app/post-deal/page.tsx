@@ -220,7 +220,7 @@ export default function PostDealPage() {
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Post a Deal</h1>
             <p className="text-sm text-white/60 mt-1">
-              Vertical drop-aligned form — phone + money formatting locked.
+              Great Job ! Once You Post Your Deal, Go Get Another One!
             </p>
           </div>
 
