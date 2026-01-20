@@ -171,7 +171,7 @@ export default function LeaderboardPage() {
   const rest = leaderboard
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       <div className="ml-64 px-10 py-10">
