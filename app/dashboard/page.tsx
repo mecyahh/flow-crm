@@ -172,8 +172,10 @@ export default function DashboardPage() {
   const monthDeals = useMemo(() => parsed.filter((d) => d.dt >= monthStart), [parsed, monthStart])
 
   // Production (AP)
-  const production = useMemo(() => monthDeals.reduce((s, d) => s + d.premiumNum, 0), [monthDeals])
-
+const production = deals.reduce(
+  (sum, d) => sum + ((d.premium || 0) * 12),
+  0
+)
   const writingAgents = useMemo(() => {
     const uniq = new Set(monthDeals.map((d) => d.user_id).filter(Boolean) as string[])
     return uniq.size
