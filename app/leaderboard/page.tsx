@@ -1,10 +1,4 @@
-// ✅ FILE: /app/leaderboard/page.tsx  (REPLACE ENTIRE FILE)
-// Restores your original professional layout:
-// - Podium stays: #1 centered, #2 left, #3 right (desktop) + stacks 1,2,3 on mobile
-// - Weekly calendar columns (M/D) with daily premium per agent
-// - Sundays show "--", all other days: bold red 0 if no production
-// - Total column is MONTH-TO-DATE premium (green)
-
+// ✅ REPLACE ENTIRE FILE: /app/leaderboard/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -16,6 +10,7 @@ type Profile = {
   first_name: string | null
   last_name: string | null
   email: string | null
+  avatar_url?: string | null
 }
 
 type DealRow = {
@@ -32,6 +27,10 @@ export default function LeaderboardPage() {
 
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [deals, setDeals] = useState<DealRow[]>([])
+
+  // ✅ Sleek week selector (always Monday-start 7-day tracker)
+  const [weekOpen, setWeekOpen] = useState(false)
+  const [weekAnchor, setWeekAnchor] = useState<string>('') // YYYY-MM-DD (any date within the desired week)
 
   useEffect(() => {
     let alive = true
@@ -50,7 +49,7 @@ export default function LeaderboardPage() {
 
         const { data: profs, error: pErr } = await supabase
           .from('profiles')
-          .select('id,first_name,last_name,email')
+          .select('id,first_name,last_name,email,avatar_url')
           .limit(10000)
         if (pErr) throw new Error(`profiles: ${pErr.message}`)
 
@@ -67,6 +66,11 @@ export default function LeaderboardPage() {
         if (!alive) return
         setProfiles((profs || []) as Profile[])
         setDeals((ds || []) as DealRow[])
+
+        // default week = current week (anchor = today)
+        const today = new Date()
+        setWeekAnchor(toISODateLocal(today))
+
         setLoading(false)
       } catch (e: any) {
         if (!alive) return
@@ -79,6 +83,12 @@ export default function LeaderboardPage() {
       alive = false
     }
   }, [])
+
+  const profileById = useMemo(() => {
+    const m = new Map<string, Profile>()
+    profiles.forEach((p) => m.set(p.id, p))
+    return m
+  }, [profiles])
 
   const nameById = useMemo(() => {
     const m = new Map<string, string>()
@@ -111,31 +121,23 @@ export default function LeaderboardPage() {
     })
   }, [deals])
 
-  // Monthly totals (for Total column + sorting)
-  const monthStart = useMemo(() => {
-    const n = new Date()
-    return new Date(n.getFullYear(), n.getMonth(), 1)
-  }, [])
+  // ✅ Weekly tracker (7 days) ALWAYS starts Monday, includes Sunday, but shows red 0 when empty
+  const weekRange = useMemo(() => {
+    const anchor = weekAnchor ? new Date(weekAnchor + 'T00:00:00') : new Date()
+    const monday = startOfWeekMonday(anchor)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    const end = new Date(sunday)
+    end.setHours(23, 59, 59, 999)
+    return { start: monday, end }
+  }, [weekAnchor])
 
-  const monthDeals = useMemo(() => parsedDeals.filter((d) => d.dt >= monthStart), [parsedDeals, monthStart])
-
-  const monthTotals = useMemo(() => {
-    const totals = new Map<string, number>()
-    monthDeals.forEach((d) => {
-      if (!d.uid) return
-      totals.set(d.uid, (totals.get(d.uid) || 0) + d.premiumNum)
-    })
-    return totals
-  }, [monthDeals])
-
-  // Last 7 calendar dates columns (M/D)
-  const last7Days = useMemo(() => {
+  const weekDays = useMemo(() => {
     const out: { key: string; label: string; isSunday: boolean }[] = []
-    const now = new Date()
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now)
-      d.setHours(0, 0, 0, 0)
-      d.setDate(d.getDate() - i)
+    const d0 = new Date(weekRange.start)
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(d0)
+      d.setDate(d0.getDate() + i)
       out.push({
         key: toISODateLocal(d),
         label: `${d.getMonth() + 1}/${d.getDate()}`,
@@ -143,47 +145,135 @@ export default function LeaderboardPage() {
       })
     }
     return out
-  }, [])
+  }, [weekRange.start])
 
- // Daily AP (Annual Premium) per user per dateKey
-const dailyPremiumByUser = useMemo(() => {
-  const map = new Map<string, Map<string, number>>() // uid -> (dateKey -> AP sum)
+  // Deals inside the selected week
+  const weekDeals = useMemo(() => {
+    return parsedDeals.filter((d) => d.dt >= weekRange.start && d.dt <= weekRange.end && !!d.uid)
+  }, [parsedDeals, weekRange.start, weekRange.end])
 
-  parsedDeals.forEach((d) => {
-    if (!d.uid) return
-    if (!map.has(d.uid)) map.set(d.uid, new Map<string, number>())
+  // ✅ Weekly totals PREMIUM (for Total column in table) — NOT *12
+  const weekTotalsPremium = useMemo(() => {
+    const totals = new Map<string, number>()
+    weekDeals.forEach((d) => {
+      if (!d.uid) return
+      totals.set(d.uid, (totals.get(d.uid) || 0) + d.premiumNum)
+    })
+    return totals
+  }, [weekDeals])
 
-    const inner = map.get(d.uid)!
-    const ap = Number(d.premiumNum || 0) * 12
+  // ✅ Weekly totals AP (for podium ranking + display) — *12 rule
+  const weekTotalsAP = useMemo(() => {
+    const totals = new Map<string, number>()
+    weekDeals.forEach((d) => {
+      if (!d.uid) return
+      const ap = Number(d.premiumNum || 0) * 12
+      totals.set(d.uid, (totals.get(d.uid) || 0) + ap)
+    })
+    return totals
+  }, [weekDeals])
 
-    inner.set(d.dateKey, (inner.get(d.dateKey) || 0) + ap)
-  })
+  // Daily AP per user per dateKey (premium * 12)
+  const dailyAPByUser = useMemo(() => {
+    const map = new Map<string, Map<string, number>>() // uid -> (dateKey -> AP sum)
 
-  return map
-}, [parsedDeals])
-  
+    weekDeals.forEach((d) => {
+      if (!d.uid) return
+      if (!map.has(d.uid)) map.set(d.uid, new Map<string, number>())
+      const inner = map.get(d.uid)!
+
+      const ap = Number(d.premiumNum || 0) * 12
+      inner.set(d.dateKey, (inner.get(d.dateKey) || 0) + ap)
+    })
+
+    return map
+  }, [weekDeals])
+
+  // ✅ Leaderboard rows now follow the SELECTED WEEK
+  // - ranking uses weekly AP (so Top 3 is correct)
+  // - table Total uses weekly premium (not *12)
   const leaderboard = useMemo(() => {
-    const rows = Array.from(monthTotals.entries()).map(([uid, total]) => ({
-      uid,
-      name: nameById.get(uid) || 'Agent',
-      total,
-    }))
-    rows.sort((a, b) => b.total - a.total)
+    const allUids = new Set<string>()
+    weekDeals.forEach((d) => d.uid && allUids.add(d.uid))
+
+    const rows = Array.from(allUids.values()).map((uid) => {
+      const name = nameById.get(uid) || 'Agent'
+      const p = profileById.get(uid)
+      const avatar_url = p?.avatar_url || null
+      const totalPremium = weekTotalsPremium.get(uid) || 0
+      const totalAP = weekTotalsAP.get(uid) || 0
+      return { uid, name, avatar_url, totalPremium, totalAP }
+    })
+
+    rows.sort((a, b) => b.totalAP - a.totalAP) // ✅ week podium order follows selected week
     return rows
-  }, [monthTotals, nameById])
+  }, [weekDeals, nameById, profileById, weekTotalsPremium, weekTotalsAP])
 
   const top3 = leaderboard.slice(0, 3)
   const rest = leaderboard
+
+  // ✅ Top summary cards (theme-matching): Agency Production (AP), Families Protected, Writing Agents
+  const agencySummary = useMemo(() => {
+    const productionAP = weekDeals.reduce((s, d) => s + Number(d.premiumNum || 0) * 12, 0)
+    const families = weekDeals.length
+    const writers = new Set(weekDeals.map((d) => d.uid).filter(Boolean) as string[]).size
+    return { productionAP, families, writers }
+  }, [weekDeals])
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
+      {/* animation CSS (only affects top-3 podium + shimmer/crown) */}
+      <style jsx global>{`
+        @keyframes flowFloat {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+          100% { transform: translateY(0px); }
+        }
+        @keyframes flowShimmer {
+          0% { transform: translateX(-120%); opacity: 0; }
+          20% { opacity: 0.55; }
+          50% { opacity: 0.35; }
+          100% { transform: translateX(120%); opacity: 0; }
+        }
+        @keyframes crownPop {
+          0% { transform: translateY(0px) rotate(-8deg); }
+          50% { transform: translateY(-4px) rotate(8deg); }
+          100% { transform: translateY(0px) rotate(-8deg); }
+        }
+        .podium-anim { animation: flowFloat 3.6s ease-in-out infinite; }
+        .podium-glow:hover { box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 18px 55px rgba(0,0,0,0.55); }
+        .podium-shimmer {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          pointer-events: none;
+        }
+        .podium-shimmer::before {
+          content: '';
+          position: absolute;
+          top: -20%;
+          left: -60%;
+          width: 60%;
+          height: 140%;
+          transform: skewX(-18deg);
+          background: linear-gradient(
+            90deg,
+            rgba(255,255,255,0) 0%,
+            rgba(255,255,255,0.18) 50%,
+            rgba(255,255,255,0) 100%
+          );
+          animation: flowShimmer 2.8s ease-in-out infinite;
+        }
+        .crown-anim { animation: crownPop 1.8s ease-in-out infinite; }
+      `}</style>
+
       <div className="ml-64 px-10 py-10">
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
-            <p className="text-sm text-white/60 mt-1">Agency-wide monthly production + weekly consistency.</p>
+            <p className="text-sm text-white/60 mt-1">Agency-wide weekly leaderboard + daily AP consistency.</p>
           </div>
 
           <button
@@ -201,7 +291,68 @@ const dailyPremiumByUser = useMemo(() => {
           </div>
         )}
 
-        {/* TOP 3 PODIUM (professional, centered #1) */}
+        {/* ✅ Layout: top-left week selector, then 3 stat cards, then podium, then table */}
+        <div className="mb-6">
+          <div className="relative inline-block">
+            <button
+              onClick={() => setWeekOpen((v) => !v)}
+              className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold inline-flex items-center gap-2"
+              title="Select week (starts Monday)"
+            >
+              <CalendarIcon />
+              <span className="text-white/70">
+                {toISODateLocal(weekRange.start)} → {toISODateLocal(weekRange.end)}
+              </span>
+            </button>
+
+            {weekOpen && (
+              <div className="absolute left-0 mt-2 z-[200] w-[340px] rounded-2xl border border-white/10 bg-[var(--card)]/95 backdrop-blur-xl shadow-2xl p-4">
+                <div className="text-sm font-semibold mb-3">Week Selector</div>
+
+                <div>
+                  <div className="text-[11px] text-white/55 mb-2">Pick any date (auto snaps to Monday → Sunday)</div>
+                  <input
+                    type="date"
+                    className={inputCls}
+                    value={weekAnchor}
+                    onChange={(e) => setWeekAnchor(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-2 mt-3">
+                  <button
+                    className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
+                    onClick={() => {
+                      const t = new Date()
+                      setWeekAnchor(toISODateLocal(t))
+                      setWeekOpen(false)
+                    }}
+                  >
+                    This week
+                  </button>
+
+                  <button
+                    className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
+                    onClick={() => setWeekOpen(false)}
+                  >
+                    Done
+                  </button>
+                </div>
+
+                <div className="mt-2 text-[11px] text-white/45">7-day tracker resets every Monday.</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ✅ 3 stat cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <MiniStat label="Agency Production (AP)" value={loading ? '—' : `$${formatMoney(agencySummary.productionAP)}`} />
+          <MiniStat label="Families Protected" value={loading ? '—' : String(agencySummary.families)} />
+          <MiniStat label="Writing Agents" value={loading ? '—' : String(agencySummary.writers)} />
+        </div>
+
+        {/* ✅ TOP 3 PODIUM (animated, centered #1) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           {/* Mobile stack order: 1,2,3. Desktop order: 2 | 1 | 3 */}
           <div className="order-2 md:order-1">
@@ -229,12 +380,13 @@ const dailyPremiumByUser = useMemo(() => {
                   <th className="text-left px-6 py-3 whitespace-nowrap">Rank</th>
                   <th className="text-left px-6 py-3 whitespace-nowrap">Agent</th>
 
-                  {last7Days.map((d) => (
+                  {weekDays.map((d) => (
                     <th key={d.key} className="text-center px-4 py-3 whitespace-nowrap">
                       {d.label}
                     </th>
                   ))}
 
+                  {/* ✅ Total stays PREMIUM only (weekly premium), not AP */}
                   <th className="text-right px-6 py-3 whitespace-nowrap">Total</th>
                 </tr>
               </thead>
@@ -242,20 +394,27 @@ const dailyPremiumByUser = useMemo(() => {
               <tbody>
                 {!loading &&
                   rest.map((r, i) => {
-                    const daily = dailyPremiumByUser.get(r.uid) || new Map<string, number>()
+                    const daily = dailyAPByUser.get(r.uid) || new Map<string, number>()
                     return (
                       <tr key={r.uid} className="border-b border-white/10 hover:bg-white/5 transition">
                         <td className="px-6 py-4 font-semibold whitespace-nowrap">{i + 1}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{r.name}</td>
 
-                        {last7Days.map((d) => {
-                          if (d.isSunday) {
-                            return (
-                              <td key={d.key} className="px-4 py-4 text-center text-white/40 font-semibold whitespace-nowrap">
-                                --
-                              </td>
-                            )
-                          }
+                        {/* ✅ Profile picture next to agent name */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-2xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center shrink-0">
+                              {r.avatar_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={r.avatar_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <span className="text-xs text-white/60">{(r.name || 'A').slice(0, 1).toUpperCase()}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0 truncate">{r.name}</div>
+                          </div>
+                        </td>
+
+                        {weekDays.map((d) => {
                           const v = daily.get(d.key) || 0
                           if (v <= 0) {
                             return (
@@ -272,7 +431,7 @@ const dailyPremiumByUser = useMemo(() => {
                         })}
 
                         <td className="px-6 py-4 text-right font-semibold text-green-300 whitespace-nowrap">
-                          ${formatMoney(r.total)}
+                          ${formatMoney(r.totalPremium)}
                         </td>
                       </tr>
                     )
@@ -280,7 +439,7 @@ const dailyPremiumByUser = useMemo(() => {
 
                 {!loading && rest.length === 0 && (
                   <tr>
-                    <td className="px-6 py-6 text-white/60" colSpan={3 + last7Days.length}>
+                    <td className="px-6 py-6 text-white/60" colSpan={3 + weekDays.length}>
                       No data yet.
                     </td>
                   </tr>
@@ -288,7 +447,7 @@ const dailyPremiumByUser = useMemo(() => {
 
                 {loading && (
                   <tr>
-                    <td className="px-6 py-6 text-white/60" colSpan={3 + last7Days.length}>
+                    <td className="px-6 py-6 text-white/60" colSpan={3 + weekDays.length}>
                       Loading…
                     </td>
                   </tr>
@@ -312,20 +471,31 @@ function PodiumCard({
   spotlight,
 }: {
   rank: 1 | 2 | 3
-  data?: { name: string; total: number }
+  data?: { name: string; avatar_url?: string | null; totalAP: number }
   spotlight?: boolean
 }) {
   return (
     <div
       className={[
         'relative rounded-2xl border border-white/10 bg-white/5 p-6 overflow-hidden',
+        'podium-glow podium-anim transition will-change-transform',
         spotlight ? 'md:-translate-y-2 bg-white/10' : '',
       ].join(' ')}
     >
+      <div className="podium-shimmer" />
+
       {spotlight && (
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[520px] rounded-full bg-yellow-400/10 blur-3xl" />
           <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[360px] h-[360px] rounded-full bg-yellow-300/10 blur-3xl" />
+        </div>
+      )}
+
+      {rank === 1 && (
+        <div className="absolute top-4 right-4 crown-anim">
+          <span className="inline-flex items-center justify-center w-9 h-9 rounded-2xl border border-white/10 bg-white/5">
+            👑
+          </span>
         </div>
       )}
 
@@ -334,24 +504,45 @@ function PodiumCard({
         <div className="mt-1 text-3xl font-extrabold">{rank}</div>
 
         <div className="mt-4 text-xs text-white/60">Agent</div>
-        <div className={spotlight ? 'mt-1 text-xl font-extrabold' : 'mt-1 text-lg font-semibold'}>
-          {data?.name || '—'}
+
+        {/* ✅ avatar next to name (matches dashboard style) */}
+        <div className="mt-2 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center shrink-0">
+            {data?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={data.avatar_url} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xs text-white/60">{((data?.name || 'A') as string).slice(0, 1).toUpperCase()}</span>
+            )}
+          </div>
+
+          <div className={spotlight ? 'text-xl font-extrabold truncate' : 'text-lg font-semibold truncate'}>
+            {data?.name || '—'}
+          </div>
         </div>
 
-        <div className="mt-4 text-xs text-white/60">Premium</div>
-        <div
-          className={
-            spotlight ? 'mt-1 text-3xl font-extrabold text-green-300' : 'mt-1 text-2xl font-bold text-green-300'
-          }
-        >
-          {data ? `$${formatMoney(data.total)}` : '—'}
+        <div className="mt-4 text-xs text-white/60">Total AP</div>
+        <div className={spotlight ? 'mt-1 text-3xl font-extrabold text-green-300' : 'mt-1 text-2xl font-bold text-green-300'}>
+          {data ? `$${formatMoney(data.totalAP)}` : '—'}
         </div>
       </div>
     </div>
   )
 }
 
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="glass p-6">
+      <p className="text-sm text-white/60">{label}</p>
+      <p className="text-2xl font-semibold mt-1">{value}</p>
+    </div>
+  )
+}
+
 /* ---------- Helpers ---------- */
+
+const inputCls =
+  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
 function formatMoney(n: number) {
   const num = Number(n || 0)
@@ -364,4 +555,28 @@ function toISODateLocal(d: Date) {
   const m = String(dt.getMonth() + 1).padStart(2, '0')
   const day = String(dt.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+// Monday-start week
+function startOfWeekMonday(d: Date) {
+  const dt = new Date(d)
+  dt.setHours(0, 0, 0, 0)
+  const day = dt.getDay() // 0..6 (Sun..Sat)
+  const diff = day === 0 ? -6 : 1 - day
+  dt.setDate(dt.getDate() + diff)
+  return dt
+}
+
+function CalendarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7 3v3M17 3v3M4 8h16M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
+        stroke="rgba(255,255,255,0.7)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
 }
