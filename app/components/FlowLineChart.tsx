@@ -1,6 +1,7 @@
+// ✅ REPLACE ENTIRE FILE: /app/components/FlowLineChart.tsx
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -17,17 +18,27 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 export default function FlowLineChart({
   labels,
   values,
+  interactive = false,
 }: {
   labels: string[]
   values: number[]
+  interactive?: boolean
 }) {
-  const trend = useMemo(() => {
+  const chartRef = useRef<any>(null)
+  const [hover, setHover] = useState<{ idx: number; delta: number; dir: 'up' | 'down' | 'flat' } | null>(null)
+
+  const baseTrend = useMemo(() => {
     const last = values[values.length - 1] ?? 0
     const prev = values[values.length - 2] ?? last
     const delta = last - prev
     const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'
     return { last, prev, delta, dir }
   }, [values])
+
+  const trend = useMemo(() => {
+    if (!interactive || !hover) return baseTrend
+    return { last: values[hover.idx] ?? 0, prev: values[hover.idx - 1] ?? values[hover.idx] ?? 0, delta: hover.delta, dir: hover.dir }
+  }, [interactive, hover, baseTrend, values])
 
   const colors = useMemo(() => {
     if (trend.dir === 'up') return { line: '#22C55E', fill: 'rgba(34,197,94,0.18)' }
@@ -68,6 +79,19 @@ export default function FlowLineChart({
       maintainAspectRatio: false,
       animation: { duration: 700, easing: 'easeOutQuart' },
       interaction: { mode: 'index', intersect: false },
+      onHover: (_evt: any, activeEls: any[]) => {
+        if (!interactive) return
+        if (!activeEls?.length) {
+          if (hover) setHover(null)
+          return
+        }
+        const idx = activeEls[0].index ?? 0
+        const cur = values[idx] ?? 0
+        const prev = (idx > 0 ? values[idx - 1] : cur) ?? cur
+        const delta = cur - prev
+        const dir: 'up' | 'down' | 'flat' = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat'
+        setHover({ idx, delta, dir })
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -97,27 +121,29 @@ export default function FlowLineChart({
         },
       },
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive, values])
 
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-xs text-white/60">Trend</div>
+        <div className="text-xs text-white/60">{interactive ? 'Trend (hover)' : 'Trend'}</div>
         <div
           className={`text-xs font-semibold ${
-            trend.dir === 'up'
-              ? 'text-green-400'
-              : trend.dir === 'down'
-              ? 'text-red-400'
-              : 'text-blue-300'
+            trend.dir === 'up' ? 'text-green-400' : trend.dir === 'down' ? 'text-red-400' : 'text-blue-300'
           }`}
         >
           {trend.dir === 'up' ? '▲' : trend.dir === 'down' ? '▼' : '■'} {trend.delta}
         </div>
       </div>
 
-      <div className="h-56 w-full">
-        <Line data={data} options={options} />
+      <div
+        className="h-56 w-full"
+        onMouseLeave={() => {
+          if (interactive) setHover(null)
+        }}
+      >
+        <Line ref={chartRef} data={data} options={options} />
       </div>
     </div>
   )
