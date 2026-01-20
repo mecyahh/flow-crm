@@ -324,7 +324,7 @@ export default function AnalyticsPage() {
   }, [parsed])
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
