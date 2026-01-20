@@ -145,18 +145,23 @@ export default function LeaderboardPage() {
     return out
   }, [])
 
-  // Daily premiums per user per dateKey (local date)
-  const dailyPremiumByUser = useMemo(() => {
-    const map = new Map<string, Map<string, number>>() // uid -> (dateKey -> sum)
-    parsedDeals.forEach((d) => {
-      if (!d.uid) return
-      if (!map.has(d.uid)) map.set(d.uid, new Map<string, number>())
-      const inner = map.get(d.uid)!
-      inner.set(d.dateKey, (inner.get(d.dateKey) || 0) + d.premiumNum)
-    })
-    return map
-  }, [parsedDeals])
+ // Daily AP (Annual Premium) per user per dateKey
+const dailyPremiumByUser = useMemo(() => {
+  const map = new Map<string, Map<string, number>>() // uid -> (dateKey -> AP sum)
 
+  parsedDeals.forEach((d) => {
+    if (!d.uid) return
+    if (!map.has(d.uid)) map.set(d.uid, new Map<string, number>())
+
+    const inner = map.get(d.uid)!
+    const ap = Number(d.premiumNum || 0) * 12
+
+    inner.set(d.dateKey, (inner.get(d.dateKey) || 0) + ap)
+  })
+
+  return map
+}, [parsedDeals])
+  
   const leaderboard = useMemo(() => {
     const rows = Array.from(monthTotals.entries()).map(([uid, total]) => ({
       uid,
