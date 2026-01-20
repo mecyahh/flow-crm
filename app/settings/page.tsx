@@ -1,3 +1,4 @@
+// ✅ FULL REPLACEMENT FILE: /app/settings/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -5,135 +6,19 @@ import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 
 type Profile = {
-  id: string
-  created_at?: string
-  email: string | null
-  first_name: string | null
-  last_name: string | null
-  role: string
-  is_agency_owner: boolean
-  upline_id?: string | null
-  comp?: number | null
-  theme?: string | null
-  avatar_url: string | null
+  id: string
+  created_at?: string
+  email: string | null
+  first_name: string | null
+  last_name: string | null
+  role: string
+  is_agency_owner: boolean
+  upline_id?: string | null
+  comp?: number | null
+  theme?: string | null
+  avatar_url: string | null
 }
 
-type CarrierRow = {
-  id: string
-  created_at: string
-  name: string
-  supported_name: string | null
-  advance_rate: number
-  active: boolean
-  sort_order: number
-  eapp_url: string | null
-  portal_url: string | null
-  support_phone: string | null
-  logo_url: string | null
-}
-
-const THEMES = [
-  { key: 'blue', label: 'Grey / Blue / White' },
-  { key: 'gold', label: 'Grey / Gold / Black & White' },
-  { key: 'green', label: 'Grey / Green / White' },
-  { key: 'red', label: 'Grey / Red / Black & White' },
-  { key: 'mono', label: 'Grey / White' },
-  { key: 'fuchsia', label: 'Grey / Fuchsia' },
-  { key: 'bw', label: 'White / Black' },
-  { key: 'orange', label: 'Grey / Orange' },
-] as const
-
-const COMP_VALUES = Array.from({ length: 41 }, (_, i) => i * 5) // 0..200
-
-function errMsg(e: any) {
-  return e?.message || e?.error_description || e?.error || 'Something failed'
-}
-
-async function run<T>(
-  setBusy: (v: boolean) => void,
-  setToast: (v: string | null) => void,
-  label: string,
-  fn: () => Promise<T>
-) {
-  try {
-    setBusy(true)
-    setToast(null)
-    const res = await fn()
-    setToast(`${label} ✅`)
-    return res
-  } catch (e: any) {
-    setToast(`${label} failed: ${errMsg(e)}`)
-    throw e
-  } finally {
-    setBusy(false)
-  }
-}
-
-export default function SettingsPage() {
-  const [toast, setToast] = useState<string | null>(null)
-
-  const [booting, setBooting] = useState(false)
-  const [me, setMe] = useState<Profile | null>(null)
-
-  const [tab, setTab] = useState<'profile' | 'agents' | 'positions' | 'carriers'>('profile')
-
-  // Profile form
-  const [pFirst, setPFirst] = useState('')
-  const [pLast, setPLast] = useState('')
-  const [pEmail, setPEmail] = useState('')
-  const [pTheme, setPTheme] = useState<string>('blue')
-  const [avatarPreview, setAvatarPreview] = useState<string>('')
-
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
-
-  // Agents
-  const [agents, setAgents] = useState<Profile[]>([])
-  const [loadingAgents, setLoadingAgents] = useState(false)
-  const [refreshingAgents, setRefreshingAgents] = useState(false)
-  const [agentSearch, setAgentSearch] = useState('')
-  const [inviteOpen, setInviteOpen] = useState(false)
-  const [inviting, setInviting] = useState(false)
-
-  const [invite, setInvite] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    upline_id: '',
-    comp: 70,
-    role: 'agent',
-    is_agency_owner: false,
-    theme: 'blue',
-  })
-
-  // Edit modal
-  const [editOpen, setEditOpen] = useState(false)
-  const [editSaving, setEditSaving] = useState(false)
-  const [editTarget, setEditTarget] = useState<Profile | null>(null)
-  const [edit, setEdit] = useState({
-    first_name: '',
-    last_name: '',
-    role: 'agent',
-    is_agency_owner: false,
-    comp: 70,
-    upline_id: '',
-    theme: 'blue',
-  })
-
-  // Positions
-  const [pos, setPos] = useState({
-    user_id: '',
-    upline_id: '',
-    comp: 70,
-    effective_date: '',
-  })
-  const [savingPosition, setSavingPosition] = useState(false)
-
-// ✅ DROP-IN REPLACEMENT: replace ONLY your "Carriers" tab UI block in /app/settings/page.tsx
-// This restores: Carrier | Supported Name | Advance | Sort | Products | Actions (✏️ 🗑)
-// and adds: edit carrier modal + products modal + create carrier modal (same glass UI)
-
-// 1) Make sure your CarrierRow type includes these fields:
 type CarrierRow = {
   id: string
   created_at: string
@@ -148,7 +33,6 @@ type CarrierRow = {
   logo_url: string | null
 }
 
-// 2) ADD this ProductRow type near the top:
 type ProductRow = {
   id: string
   carrier_id: string
@@ -157,257 +41,705 @@ type ProductRow = {
   is_active: boolean | null
 }
 
-// 3) ADD these state hooks near your other Carriers state:
-const [productsOpen, setProductsOpen] = useState(false)
-const [productsLoading, setProductsLoading] = useState(false)
-const [productsSaving, setProductsSaving] = useState(false)
-const [productsCarrier, setProductsCarrier] = useState<CarrierRow | null>(null)
-const [products, setProducts] = useState<ProductRow[]>([])
-const [newProduct, setNewProduct] = useState({ product_name: '', sort_order: '' })
+const THEMES = [
+  { key: 'blue', label: 'Grey / Blue / White' },
+  { key: 'gold', label: 'Grey / Gold / Black & White' },
+  { key: 'green', label: 'Grey / Green / White' },
+  { key: 'red', label: 'Grey / Red / Black & White' },
+  { key: 'mono', label: 'Grey / White' },
+  { key: 'fuchsia', label: 'Grey / Fuchsia' },
+  { key: 'bw', label: 'White / Black' },
+  { key: 'orange', label: 'Grey / Orange' },
+] as const
 
-const [carrierEditOpen, setCarrierEditOpen] = useState(false)
-const [carrierEditSaving, setCarrierEditSaving] = useState(false)
-const [carrierEditTarget, setCarrierEditTarget] = useState<CarrierRow | null>(null)
-const [carrierEdit, setCarrierEdit] = useState({
-  name: '',
-  supported_name: '',
-  advance_rate: '0.75',
-  sort_order: '',
-  active: true,
-})
+const COMP_VALUES = Array.from({ length: 41 }, (_, i) => i * 5) // 0..200
 
-// 4) ADD these helpers/functions inside SettingsPage():
-
-function openCarrierEdit(c: CarrierRow) {
-  setCarrierEditTarget(c)
-  setCarrierEdit({
-    name: c.name || '',
-    supported_name: c.supported_name || '',
-    advance_rate: String(c.advance_rate ?? 0.75),
-    sort_order: String(c.sort_order ?? 999),
-    active: !!c.active,
-  })
-  setCarrierEditOpen(true)
+function errMsg(e: any) {
+  return e?.message || e?.error_description || e?.error || 'Something failed'
 }
 
-async function saveCarrierEdit() {
-  if (!carrierEditTarget) return
-  await run(setCarrierEditSaving, setToast, 'Carrier updated', async () => {
-    const name = carrierEdit.name.trim()
-    if (!name) throw new Error('Carrier name required')
-
-    const adv = Number(carrierEdit.advance_rate)
-    if (!Number.isFinite(adv) || adv <= 0) throw new Error('Advance rate invalid')
-
-    const sort = carrierEdit.sort_order.trim() ? Number(carrierEdit.sort_order.trim()) : 999
-    if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
-
-    const payload = {
-      name,
-      supported_name: carrierEdit.supported_name.trim() || null,
-      advance_rate: adv,
-      sort_order: sort,
-      active: !!carrierEdit.active,
-    }
-
-    const { error } = await supabase.from('carriers').update(payload).eq('id', carrierEditTarget.id)
-    if (error) throw error
-
-    setCarrierEditOpen(false)
-    setCarrierEditTarget(null)
-    await loadCarriers()
-  })
-}
-
-async function deleteCarrier(c: CarrierRow) {
-  const ok = window.confirm(`Delete carrier "${c.name}"? This will also remove its products.`)
-  if (!ok) return
-
-  await run(setRefreshingCarriers, setToast, 'Carrier deleted', async () => {
-    // remove products first (safe)
-    await supabase.from('carrier_products').delete().eq('carrier_id', c.id)
-    const { error } = await supabase.from('carriers').delete().eq('id', c.id)
-    if (error) throw error
-    await loadCarriers()
-  })
-}
-
-async function openProducts(c: CarrierRow) {
-  setProductsCarrier(c)
-  setProductsOpen(true)
-  setProductsLoading(true)
-  setProducts([])
+async function run<T>(
+  setBusy: (v: boolean) => void,
+  setToast: (v: string | null) => void,
+  label: string,
+  fn: () => Promise<T>
+) {
   try {
-    const { data, error } = await supabase
-      .from('carrier_products')
-      .select('id,carrier_id,product_name,sort_order,is_active')
-      .eq('carrier_id', c.id)
-      .order('sort_order', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: true })
-      .limit(5000)
-
-    if (error) throw error
-    setProducts((data || []) as ProductRow[])
+    setBusy(true)
+    setToast(null)
+    const res = await fn()
+    setToast(`${label} ✅`)
+    return res
   } catch (e: any) {
-    setToast(`Could not load products: ${errMsg(e)}`)
-    setProducts([])
+    setToast(`${label} failed: ${errMsg(e)}`)
+    throw e
   } finally {
-    setProductsLoading(false)
+    setBusy(false)
   }
 }
 
-async function addProduct() {
-  if (!productsCarrier) return
-  await run(setProductsSaving, setToast, 'Product added', async () => {
-    const name = newProduct.product_name.trim()
-    if (!name) throw new Error('Product name required')
+export default function SettingsPage() {
+  const [toast, setToast] = useState<string | null>(null)
 
-    const sort = newProduct.sort_order.trim() ? Number(newProduct.sort_order.trim()) : 999
-    if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
+  const [booting, setBooting] = useState(false)
+  const [me, setMe] = useState<Profile | null>(null)
 
-    const payload = {
-      carrier_id: productsCarrier.id,
-      product_name: name,
-      sort_order: sort,
-      is_active: true,
+  const [tab, setTab] = useState<'profile' | 'agents' | 'positions' | 'carriers'>('profile')
+
+  // Profile
+  const [pFirst, setPFirst] = useState('')
+  const [pLast, setPLast] = useState('')
+  const [pEmail, setPEmail] = useState('')
+  const [pTheme, setPTheme] = useState<string>('blue')
+  const [avatarPreview, setAvatarPreview] = useState<string>('')
+
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  // Agents
+  const [agents, setAgents] = useState<Profile[]>([])
+  const [loadingAgents, setLoadingAgents] = useState(false)
+  const [refreshingAgents, setRefreshingAgents] = useState(false)
+  const [agentSearch, setAgentSearch] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviting, setInviting] = useState(false)
+
+  const [invite, setInvite] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    upline_id: '',
+    comp: 70,
+    role: 'agent',
+    is_agency_owner: false,
+    theme: 'blue',
+  })
+
+  // Edit agent modal
+  const [editOpen, setEditOpen] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
+  const [editTarget, setEditTarget] = useState<Profile | null>(null)
+  const [edit, setEdit] = useState({
+    first_name: '',
+    last_name: '',
+    role: 'agent',
+    is_agency_owner: false,
+    comp: 70,
+    upline_id: '',
+    theme: 'blue',
+  })
+
+  // Positions
+  const [pos, setPos] = useState({
+    user_id: '',
+    upline_id: '',
+    comp: 70,
+    effective_date: '',
+  })
+  const [savingPosition, setSavingPosition] = useState(false)
+
+  // Carriers
+  const [loadingCarriers, setLoadingCarriers] = useState(false)
+  const [refreshingCarriers, setRefreshingCarriers] = useState(false)
+  const [carriers, setCarriers] = useState<CarrierRow[]>([])
+  const [carrierSearch, setCarrierSearch] = useState('')
+
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creatingCarrier, setCreatingCarrier] = useState(false)
+  const [newCarrier, setNewCarrier] = useState({
+    name: '',
+    supported_name: '',
+    advance_rate: '0.75',
+    sort_order: '',
+    active: true,
+    eapp_url: '',
+    portal_url: '',
+    support_phone: '',
+    logo_url: '',
+  })
+
+  // Carrier edit modal
+  const [carrierEditOpen, setCarrierEditOpen] = useState(false)
+  const [carrierEditSaving, setCarrierEditSaving] = useState(false)
+  const [carrierEditTarget, setCarrierEditTarget] = useState<CarrierRow | null>(null)
+  const [carrierEdit, setCarrierEdit] = useState({
+    name: '',
+    supported_name: '',
+    advance_rate: '0.75',
+    sort_order: '',
+    active: true,
+    eapp_url: '',
+    portal_url: '',
+    support_phone: '',
+    logo_url: '',
+  })
+
+  // Products modal
+  const [productsOpen, setProductsOpen] = useState(false)
+  const [productsCarrier, setProductsCarrier] = useState<CarrierRow | null>(null)
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [productsSaving, setProductsSaving] = useState(false)
+  const [products, setProducts] = useState<ProductRow[]>([])
+  const [newProduct, setNewProduct] = useState({ product_name: '', sort_order: '' })
+
+  const isAdmin = me?.role === 'admin'
+  const isOwner = !!me?.is_agency_owner
+  const canManageAgents = !!(isAdmin || isOwner)
+
+  useEffect(() => {
+    boot()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function boot() {
+    setBooting(true)
+    setToast(null)
+    try {
+      const { data: userRes, error: userErr } = await supabase.auth.getUser()
+      if (userErr) throw userErr
+      const uid = userRes.user?.id
+      if (!uid) {
+        window.location.href = '/login'
+        return
+      }
+
+      const { data: prof, error: profErr } = await supabase
+        .from('profiles')
+        .select('id,created_at,email,first_name,last_name,role,is_agency_owner,upline_id,comp,theme,avatar_url')
+        .eq('id', uid)
+        .single()
+
+      if (profErr) throw profErr
+      const p = prof as Profile
+      setMe(p)
+
+      setPFirst(p.first_name || '')
+      setPLast(p.last_name || '')
+      setPEmail(p.email || '')
+      setPTheme(p.theme || 'blue')
+      setAvatarPreview(p.avatar_url || '')
+
+      if (p.role === 'admin' || !!p.is_agency_owner) {
+        await loadAgents()
+        setTab('agents')
+      } else {
+        setTab('profile')
+      }
+
+      if (p.role === 'admin') {
+        await loadCarriers()
+      }
+    } catch (e: any) {
+      setToast(`Boot failed: ${errMsg(e)}`)
+    } finally {
+      setBooting(false)
     }
+  }
 
-    const { error } = await supabase.from('carrier_products').insert(payload)
-    if (error) throw error
+  async function authHeader() {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return token ? `Bearer ${token}` : ''
+  }
 
+  async function logout() {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+
+  async function saveProfile() {
+    if (!me) return
+    await run(setSavingProfile, setToast, 'Profile saved', async () => {
+      const payload = {
+        first_name: pFirst.trim() || null,
+        last_name: pLast.trim() || null,
+        email: pEmail.trim() || null,
+        theme: pTheme || 'blue',
+        avatar_url: avatarPreview?.trim() || null,
+      }
+      const { error } = await supabase.from('profiles').update(payload).eq('id', me.id)
+      if (error) throw error
+      await boot()
+    })
+  }
+
+  async function uploadAvatar(file: File) {
+    if (!me) return
+    await run(setUploadingAvatar, setToast, 'Avatar updated', async () => {
+      const ext = file.name.split('.').pop() || 'png'
+      const path = `${me.id}.${ext}`
+
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      const url = data.publicUrl
+
+      const { error: upErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', me.id)
+      if (upErr) throw upErr
+
+      setAvatarPreview(url)
+      await boot()
+    })
+  }
+
+  async function loadAgents() {
+    setLoadingAgents(true)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5000)
+
+      if (error) throw error
+      setAgents((data || []) as Profile[])
+    } catch (e: any) {
+      setToast(`Could not load agents: ${errMsg(e)}`)
+      setAgents([])
+    } finally {
+      setLoadingAgents(false)
+    }
+  }
+
+  const filteredAgents = useMemo(() => {
+    const q = agentSearch.trim().toLowerCase()
+    if (!q) return agents
+    return agents.filter((a) => {
+      const b = [a.first_name, a.last_name, a.email].filter(Boolean).join(' ').toLowerCase()
+      return b.includes(q)
+    })
+  }, [agents, agentSearch])
+
+  const uplineOptions = useMemo(() => {
+    return agents
+      .slice()
+      .sort((a, b) => {
+        const an = `${a.first_name || ''} ${a.last_name || ''}`.trim().toLowerCase()
+        const bn = `${b.first_name || ''} ${b.last_name || ''}`.trim().toLowerCase()
+        return an.localeCompare(bn)
+      })
+      .map((a) => ({
+        id: a.id,
+        label: `${(a.first_name || '').trim()} ${(a.last_name || '').trim()}${a.email ? ` • ${a.email}` : ''}`.trim(),
+      }))
+  }, [agents])
+
+  function openEdit(a: Profile) {
+    setEditTarget(a)
+    setEdit({
+      first_name: a.first_name || '',
+      last_name: a.last_name || '',
+      role: a.role || 'agent',
+      is_agency_owner: !!a.is_agency_owner,
+      comp: typeof a.comp === 'number' ? a.comp : 70,
+      upline_id: a.upline_id || '',
+      theme: a.theme || 'blue',
+    })
+    setEditOpen(true)
+  }
+
+  async function saveEdit() {
+    if (!editTarget) return
+    await run(setEditSaving, setToast, 'Agent updated', async () => {
+      const token = await authHeader()
+      if (!token) throw new Error('Not logged in')
+
+      const res = await fetch('/api/admin/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({
+          user_id: editTarget.id,
+          first_name: edit.first_name,
+          last_name: edit.last_name,
+          role: edit.role,
+          is_agency_owner: edit.is_agency_owner,
+          comp: edit.comp,
+          upline_id: edit.upline_id || null,
+          theme: edit.theme,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Update failed')
+
+      setEditOpen(false)
+      setEditTarget(null)
+      await loadAgents()
+    })
+  }
+
+  async function inviteAgent() {
+    await run(setInviting, setToast, 'Invite sent', async () => {
+      const token = await authHeader()
+      if (!token) throw new Error('Not logged in')
+      if (!invite.email.trim()) throw new Error('Email required')
+      if (!invite.first_name.trim() || !invite.last_name.trim()) throw new Error('Name required')
+
+      const res = await fetch('/api/admin/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({
+          email: invite.email.trim(),
+          first_name: invite.first_name.trim() || null,
+          last_name: invite.last_name.trim() || null,
+          upline_id: invite.upline_id || null,
+          comp: invite.comp,
+          role: invite.role,
+          is_agency_owner: invite.is_agency_owner,
+          theme: invite.theme,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Invite failed')
+
+      setInviteOpen(false)
+      setInvite({
+        first_name: '',
+        last_name: '',
+        email: '',
+        upline_id: '',
+        comp: 70,
+        role: 'agent',
+        is_agency_owner: false,
+        theme: 'blue',
+      })
+      await loadAgents()
+    })
+  }
+
+  async function updatePosition() {
+    await run(setSavingPosition, setToast, 'Position updated', async () => {
+      const token = await authHeader()
+      if (!token) throw new Error('Not logged in')
+      if (!pos.user_id) throw new Error('Select a user')
+
+      const res = await fetch('/api/admin/position', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: token },
+        body: JSON.stringify({
+          user_id: pos.user_id,
+          upline_id: pos.upline_id || null,
+          comp: pos.comp,
+          effective_date: pos.effective_date || null,
+        }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Update failed')
+
+      setPos({ user_id: '', upline_id: '', comp: 70, effective_date: '' })
+      await loadAgents()
+    })
+  }
+
+  async function loadCarriers() {
+    setLoadingCarriers(true)
+    try {
+      const { data, error } = await supabase
+        .from('carriers')
+        .select('id,created_at,name,supported_name,advance_rate,active,sort_order,eapp_url,portal_url,support_phone,logo_url')
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true })
+        .limit(5000)
+
+      if (error) throw error
+      setCarriers((data || []) as CarrierRow[])
+    } catch (e: any) {
+      setToast(`Could not load carriers: ${errMsg(e)}`)
+      setCarriers([])
+    } finally {
+      setLoadingCarriers(false)
+    }
+  }
+
+  const filteredCarriers = useMemo(() => {
+    const q = carrierSearch.trim().toLowerCase()
+    if (!q) return carriers
+    return carriers.filter((c) => {
+      const b = [c.name, c.supported_name].filter(Boolean).join(' ').toLowerCase()
+      return b.includes(q)
+    })
+  }, [carriers, carrierSearch])
+
+  async function createCarrier() {
+    await run(setCreatingCarrier, setToast, 'Carrier created', async () => {
+      const name = newCarrier.name.trim()
+      if (!name) throw new Error('Carrier name required')
+
+      const adv = Number(newCarrier.advance_rate)
+      if (!Number.isFinite(adv) || adv <= 0) throw new Error('Advance rate invalid')
+
+      const sort = newCarrier.sort_order.trim() ? Number(newCarrier.sort_order.trim()) : 999
+      if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
+
+      const payload = {
+        name,
+        supported_name: newCarrier.supported_name.trim() || null,
+        advance_rate: adv,
+        active: !!newCarrier.active,
+        sort_order: sort,
+        eapp_url: newCarrier.eapp_url.trim() || null,
+        portal_url: newCarrier.portal_url.trim() || null,
+        support_phone: newCarrier.support_phone.trim() || null,
+        logo_url: newCarrier.logo_url.trim() || null,
+      }
+
+      const { error } = await supabase.from('carriers').insert(payload)
+      if (error) throw error
+
+      setCreateOpen(false)
+      setNewCarrier({
+        name: '',
+        supported_name: '',
+        advance_rate: '0.75',
+        sort_order: '',
+        active: true,
+        eapp_url: '',
+        portal_url: '',
+        support_phone: '',
+        logo_url: '',
+      })
+
+      await loadCarriers()
+    })
+  }
+
+  function openCarrierEdit(c: CarrierRow) {
+    setCarrierEditTarget(c)
+    setCarrierEdit({
+      name: c.name || '',
+      supported_name: c.supported_name || '',
+      advance_rate: String(c.advance_rate ?? 0.75),
+      sort_order: String(c.sort_order ?? 999),
+      active: !!c.active,
+      eapp_url: c.eapp_url || '',
+      portal_url: c.portal_url || '',
+      support_phone: c.support_phone || '',
+      logo_url: c.logo_url || '',
+    })
+    setCarrierEditOpen(true)
+  }
+
+  async function saveCarrierEdit() {
+    if (!carrierEditTarget) return
+    await run(setCarrierEditSaving, setToast, 'Carrier updated', async () => {
+      const name = carrierEdit.name.trim()
+      if (!name) throw new Error('Carrier name required')
+
+      const adv = Number(carrierEdit.advance_rate)
+      if (!Number.isFinite(adv) || adv <= 0) throw new Error('Advance rate invalid')
+
+      const sort = carrierEdit.sort_order.trim() ? Number(carrierEdit.sort_order.trim()) : 999
+      if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
+
+      const payload = {
+        name,
+        supported_name: carrierEdit.supported_name.trim() || null,
+        advance_rate: adv,
+        sort_order: sort,
+        active: !!carrierEdit.active,
+        eapp_url: carrierEdit.eapp_url.trim() || null,
+        portal_url: carrierEdit.portal_url.trim() || null,
+        support_phone: carrierEdit.support_phone.trim() || null,
+        logo_url: carrierEdit.logo_url.trim() || null,
+      }
+
+      const { error } = await supabase.from('carriers').update(payload).eq('id', carrierEditTarget.id)
+      if (error) throw error
+
+      setCarrierEditOpen(false)
+      setCarrierEditTarget(null)
+      await loadCarriers()
+    })
+  }
+
+  async function deleteCarrier(c: CarrierRow) {
+    const ok = window.confirm(`Delete carrier "${c.name}"? This will also remove its products.`)
+    if (!ok) return
+
+    await run(setRefreshingCarriers, setToast, 'Carrier deleted', async () => {
+      await supabase.from('carrier_products').delete().eq('carrier_id', c.id)
+      const { error } = await supabase.from('carriers').delete().eq('id', c.id)
+      if (error) throw error
+      await loadCarriers()
+    })
+  }
+
+  async function openProducts(c: CarrierRow) {
+    setProductsCarrier(c)
+    setProductsOpen(true)
+    setProductsLoading(true)
+    setProducts([])
     setNewProduct({ product_name: '', sort_order: '' })
-    await openProducts(productsCarrier) // reload
-  })
-}
 
-async function toggleProduct(p: ProductRow) {
-  await run(setProductsSaving, setToast, 'Product updated', async () => {
-    const { error } = await supabase
-      .from('carrier_products')
-      .update({ is_active: !(p.is_active !== false) })
-      .eq('id', p.id)
-    if (error) throw error
-    if (productsCarrier) await openProducts(productsCarrier)
-  })
-}
+    try {
+      const { data, error } = await supabase
+        .from('carrier_products')
+        .select('id,carrier_id,product_name,sort_order,is_active')
+        .eq('carrier_id', c.id)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
+        .limit(5000)
 
-async function deleteProduct(p: ProductRow) {
-  const ok = window.confirm(`Delete "${p.product_name}"?`)
-  if (!ok) return
-  await run(setProductsSaving, setToast, 'Product deleted', async () => {
-    const { error } = await supabase.from('carrier_products').delete().eq('id', p.id)
-    if (error) throw error
-    if (productsCarrier) await openProducts(productsCarrier)
-  })
-}
+      if (error) throw error
+      setProducts((data || []) as ProductRow[])
+    } catch (e: any) {
+      setToast(`Could not load products: ${errMsg(e)}`)
+      setProducts([])
+    } finally {
+      setProductsLoading(false)
+    }
+  }
 
-// 5) NOW replace your current Carriers tab JSX with THIS block:
+  async function addProduct() {
+    if (!productsCarrier) return
+    await run(setProductsSaving, setToast, 'Product added', async () => {
+      const name = newProduct.product_name.trim()
+      if (!name) throw new Error('Product name required')
 
-/* -------------------- CARRIERS TAB -------------------- */
-{
-  tab === 'carriers' && isAdmin && (
-    <div className="glass rounded-2xl border border-white/10 p-6">
-      <div className="flex items-start justify-between gap-4 mb-5">
-        <div>
-          <div className="text-sm font-semibold">Carriers</div>
-          <div className="text-xs text-white/55 mt-1">
-            Carrier records + products. (Everything editable.)
-          </div>
-        </div>
+      const sort = newProduct.sort_order.trim() ? Number(newProduct.sort_order.trim()) : 999
+      if (!Number.isFinite(sort)) throw new Error('Sort order invalid')
 
-        <div className="flex items-center gap-2">
-          <button onClick={() => setCreateOpen(true)} className={saveBtn}>
-            Add Carrier
-          </button>
+      const payload = {
+        carrier_id: productsCarrier.id,
+        product_name: name,
+        sort_order: sort,
+        is_active: true,
+      }
 
-          <button
-            onClick={() =>
-              run(setRefreshingCarriers, setToast, 'Carriers refreshed', async () => {
-                await loadCarriers()
-              })
-            }
-            disabled={refreshingCarriers}
-            className={btnGlass + (refreshingCarriers ? ' opacity-50 cursor-not-allowed' : '')}
-          >
-            {refreshingCarriers ? 'Refreshing…' : 'Refresh'}
-          </button>
-        </div>
-      </div>
+      const { error } = await supabase.from('carrier_products').insert(payload)
+      if (error) throw error
 
-      <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2 mb-4">
-        <input
-          className="bg-transparent outline-none text-sm w-full placeholder:text-white/40"
-          placeholder="Search carriers…"
-          value={carrierSearch}
-          onChange={(e) => setCarrierSearch(e.target.value)}
-        />
-      </div>
+      await openProducts(productsCarrier)
+    })
+  }
 
-      {loadingCarriers && <div className="text-sm text-white/60">Loading…</div>}
+  async function toggleProduct(p: ProductRow) {
+    await run(setProductsSaving, setToast, 'Product updated', async () => {
+      const nextActive = !(p.is_active !== false)
+      const { error } = await supabase.from('carrier_products').update({ is_active: nextActive }).eq('id', p.id)
+      if (error) throw error
+      if (productsCarrier) await openProducts(productsCarrier)
+    })
+  }
 
-      {!loadingCarriers && (
-        <div className="rounded-2xl border border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
-            <div className="col-span-3">Carrier</div>
-            <div className="col-span-3">Supported Name</div>
-            <div className="col-span-2 text-right">Advance</div>
-            <div className="col-span-1 text-right">Sort</div>
-            <div className="col-span-2 text-center">Products</div>
-            <div className="col-span-1 text-right">Actions</div>
-          </div>
+  async function deleteProduct(p: ProductRow) {
+    const ok = window.confirm(`Delete "${p.product_name}"?`)
+    if (!ok) return
+    await run(setProductsSaving, setToast, 'Product deleted', async () => {
+      const { error } = await supabase.from('carrier_products').delete().eq('id', p.id)
+      if (error) throw error
+      if (productsCarrier) await openProducts(productsCarrier)
+    })
+  }
 
-          {filteredCarriers.map((c) => (
-            <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
-              <div className="col-span-3 font-semibold">{c.name}</div>
-              <div className="col-span-3 text-white/70">{c.supported_name || '—'}</div>
-              <div className="col-span-2 text-right text-white/80">{Number(c.advance_rate || 0).toFixed(2)}</div>
-              <div className="col-span-1 text-right text-white/70">{c.sort_order}</div>
+  return (
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      <Sidebar />
 
-              <div className="col-span-2 flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => openProducts(c)}
-                  className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
-                  title="Manage products"
-                >
-                  Manage
-                </button>
-              </div>
-
-              <div className="col-span-1 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => openCarrierEdit(c)}
-                  className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-2 py-2"
-                  title="Edit"
-                >
-                  ✏️
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => deleteCarrier(c)}
-                  className="rounded-xl border border-white/10 bg-white/5 hover:bg-red-600/30 transition px-2 py-2"
-                  title="Delete"
-                >
-                  🗑
-                </button>
-              </div>
+      {toast && (
+        <div className="fixed top-5 right-5 z-[999]">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--cardBorder)] shadow-2xl">
+            <div className="text-sm font-semibold">{toast}</div>
+            <div className="mt-3 flex gap-2">
+              <button className={btnSoft} onClick={() => setToast(null)}>
+                OK
+              </button>
             </div>
-          ))}
-
-          {filteredCarriers.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No carriers.</div>}
+          </div>
         </div>
       )}
 
-      {/* ---------------- EDIT CARRIER MODAL ---------------- */}
+      {/* EDIT AGENT MODAL */}
+      {editOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-xl glass rounded-2xl border border-[var(--cardBorder)] p-6">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <div className="text-sm font-semibold">Edit Agent</div>
+                <div className="text-xs text-[var(--muted)] mt-1">{editTarget?.email || '—'}</div>
+              </div>
+              <button onClick={() => setEditOpen(false)} className={btnGlass}>
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="First Name">
+                <input className={inputCls} value={edit.first_name} onChange={(e) => setEdit((p) => ({ ...p, first_name: e.target.value }))} />
+              </Field>
+
+              <Field label="Last Name">
+                <input className={inputCls} value={edit.last_name} onChange={(e) => setEdit((p) => ({ ...p, last_name: e.target.value }))} />
+              </Field>
+
+              <Field label="Role">
+                <select className={inputCls} value={edit.role} onChange={(e) => setEdit((p) => ({ ...p, role: e.target.value }))}>
+                  <option value="agent">agent</option>
+                  <option value="admin">admin</option>
+                </select>
+              </Field>
+
+              <Field label="Agency Owner">
+                <select
+                  className={inputCls}
+                  value={edit.is_agency_owner ? 'yes' : 'no'}
+                  onChange={(e) => setEdit((p) => ({ ...p, is_agency_owner: e.target.value === 'yes' }))}
+                >
+                  <option value="no">no</option>
+                  <option value="yes">yes</option>
+                </select>
+              </Field>
+
+              <Field label="Comp">
+                <select className={inputCls} value={String(edit.comp)} onChange={(e) => setEdit((p) => ({ ...p, comp: Number(e.target.value) }))}>
+                                    {COMP_VALUES.map((n) => (
+                      <option key={n} value={n}>
+                        {n}%
+                      </option>
+                    ))}
+                </select>
+              </Field>
+
+              <Field label="Upline">
+                <select className={inputCls} value={edit.upline_id} onChange={(e) => setEdit((p) => ({ ...p, upline_id: e.target.value }))}>
+                  <option value="">select</option>
+                  {uplineOptions.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Theme">
+                <select className={inputCls} value={edit.theme} onChange={(e) => setEdit((p) => ({ ...p, theme: e.target.value }))}>
+                  {THEMES.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <button onClick={saveEdit} disabled={editSaving} className={saveWide + (editSaving ? ' opacity-50 cursor-not-allowed' : '')}>
+              {editSaving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT CARRIER MODAL */}
       {carrierEditOpen && (
         <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-xl glass rounded-2xl border border-white/10 p-6">
+          <div className="w-full max-w-2xl glass rounded-2xl border border-[var(--cardBorder)] p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <div className="text-sm font-semibold">Edit Carrier</div>
-                <div className="text-xs text-white/55 mt-1">{carrierEditTarget?.name || '—'}</div>
+                <div className="text-xs text-[var(--muted)] mt-1">{carrierEditTarget?.name || '—'}</div>
               </div>
               <button onClick={() => setCarrierEditOpen(false)} className={btnGlass}>
                 Close
@@ -415,54 +747,102 @@ async function deleteProduct(p: ProductRow) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Carrier Name">
+              <Field label="Name">
                 <input className={inputCls} value={carrierEdit.name} onChange={(e) => setCarrierEdit((p) => ({ ...p, name: e.target.value }))} />
               </Field>
 
               <Field label="Supported Name">
-                <input className={inputCls} value={carrierEdit.supported_name} onChange={(e) => setCarrierEdit((p) => ({ ...p, supported_name: e.target.value }))} />
+                <input
+                  className={inputCls}
+                  value={carrierEdit.supported_name}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, supported_name: e.target.value }))}
+                />
               </Field>
 
               <Field label="Advance Rate">
-                <input className={inputCls} value={carrierEdit.advance_rate} onChange={(e) => setCarrierEdit((p) => ({ ...p, advance_rate: e.target.value }))} />
+                <input
+                  className={inputCls}
+                  value={carrierEdit.advance_rate}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, advance_rate: e.target.value }))}
+                  placeholder="0.75"
+                />
               </Field>
 
               <Field label="Sort Order">
-                <input className={inputCls} value={carrierEdit.sort_order} onChange={(e) => setCarrierEdit((p) => ({ ...p, sort_order: e.target.value }))} />
+                <input
+                  className={inputCls}
+                  value={carrierEdit.sort_order}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, sort_order: e.target.value }))}
+                  placeholder="10"
+                />
+              </Field>
+
+              <Field label="E-App URL">
+                <input
+                  className={inputCls}
+                  value={carrierEdit.eapp_url}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, eapp_url: e.target.value }))}
+                />
+              </Field>
+
+              <Field label="Portal URL">
+                <input
+                  className={inputCls}
+                  value={carrierEdit.portal_url}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, portal_url: e.target.value }))}
+                />
+              </Field>
+
+              <Field label="Support Phone">
+                <input
+                  className={inputCls}
+                  value={carrierEdit.support_phone}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, support_phone: e.target.value }))}
+                  placeholder="(888) 888-8888"
+                />
+              </Field>
+
+              <Field label="Logo URL">
+                <input
+                  className={inputCls}
+                  value={carrierEdit.logo_url}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, logo_url: e.target.value }))}
+                />
               </Field>
 
               <Field label="Active">
-                <select className={inputCls} value={carrierEdit.active ? 'yes' : 'no'} onChange={(e) => setCarrierEdit((p) => ({ ...p, active: e.target.value === 'yes' }))}>
+                <select
+                  className={inputCls}
+                  value={carrierEdit.active ? 'yes' : 'no'}
+                  onChange={(e) => setCarrierEdit((p) => ({ ...p, active: e.target.value === 'yes' }))}
+                >
                   <option value="yes">yes</option>
                   <option value="no">no</option>
                 </select>
               </Field>
             </div>
 
-            <button
-              onClick={saveCarrierEdit}
-              disabled={carrierEditSaving}
-              className={saveWide + (carrierEditSaving ? ' opacity-50 cursor-not-allowed' : '')}
-            >
+            <button onClick={saveCarrierEdit} disabled={carrierEditSaving} className={saveWide + (carrierEditSaving ? ' opacity-50 cursor-not-allowed' : '')}>
               {carrierEditSaving ? 'Saving…' : 'Save Carrier'}
             </button>
           </div>
         </div>
       )}
 
-      {/* ---------------- PRODUCTS MODAL ---------------- */}
+      {/* PRODUCTS MODAL */}
       {productsOpen && (
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-2xl glass rounded-2xl border border-white/10 p-6">
+          <div className="w-full max-w-2xl glass rounded-2xl border border-[var(--cardBorder)] p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <div className="text-sm font-semibold">Products</div>
-                <div className="text-xs text-white/55 mt-1">{productsCarrier?.name || '—'}</div>
+                <div className="text-sm font-semibold">Carrier Products</div>
+                <div className="text-xs text-[var(--muted)] mt-1">{productsCarrier?.name || '—'}</div>
               </div>
               <button
                 onClick={() => {
                   setProductsOpen(false)
                   setProductsCarrier(null)
+                  setProducts([])
                 }}
                 className={btnGlass}
               >
@@ -490,21 +870,17 @@ async function deleteProduct(p: ProductRow) {
               </Field>
 
               <div className="flex items-end">
-                <button
-                  onClick={addProduct}
-                  disabled={productsSaving}
-                  className={saveBtn + (productsSaving ? ' opacity-50 cursor-not-allowed' : '')}
-                >
+                <button onClick={addProduct} disabled={productsSaving} className={saveBtn + (productsSaving ? ' opacity-50 cursor-not-allowed' : '')}>
                   Add
                 </button>
               </div>
             </div>
 
             {productsLoading ? (
-              <div className="text-sm text-white/60">Loading…</div>
+              <div className="text-sm text-[var(--muted)]">Loading…</div>
             ) : (
-              <div className="rounded-2xl border border-white/10 overflow-hidden">
-                <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
+              <div className="rounded-2xl border border-[var(--cardBorder)] overflow-hidden">
+                <div className="grid grid-cols-12 px-4 py-3 border-b border-[var(--cardBorder)] text-[11px] text-[var(--muted)] bg-[var(--card)]">
                   <div className="col-span-7">Product</div>
                   <div className="col-span-2 text-right">Sort</div>
                   <div className="col-span-2 text-center">Active</div>
@@ -514,16 +890,18 @@ async function deleteProduct(p: ProductRow) {
                 {products.map((p) => {
                   const active = p.is_active !== false
                   return (
-                    <div key={p.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
+                    <div key={p.id} className="grid grid-cols-12 px-4 py-3 border-b border-[var(--cardBorder)] text-sm items-center">
                       <div className="col-span-7 font-semibold">{p.product_name}</div>
-                      <div className="col-span-2 text-right text-white/70">{p.sort_order ?? '—'}</div>
+                      <div className="col-span-2 text-right text-[var(--muted)]">{p.sort_order ?? '—'}</div>
                       <div className="col-span-2 flex justify-center">
                         <button
                           onClick={() => toggleProduct(p)}
                           disabled={productsSaving}
                           className={[
                             'rounded-xl border px-3 py-2 text-xs font-semibold transition',
-                            active ? 'border-green-400/25 bg-green-500/10 text-green-200' : 'border-white/10 bg-white/5 text-white/60',
+                            active
+                              ? 'border-green-400/25 bg-green-500/10 text-green-200'
+                              : 'border-white/10 bg-white/5 text-[var(--muted)]',
                           ].join(' ')}
                           title="Toggle active"
                         >
@@ -534,7 +912,7 @@ async function deleteProduct(p: ProductRow) {
                         <button
                           onClick={() => deleteProduct(p)}
                           disabled={productsSaving}
-                          className="rounded-xl border border-white/10 bg-white/5 hover:bg-red-600/30 transition px-2 py-2"
+                          className="rounded-xl border border-[var(--cardBorder)] bg-[var(--card)] hover:bg-red-600/30 transition px-2 py-2"
                           title="Delete"
                         >
                           🗑
@@ -544,103 +922,9 @@ async function deleteProduct(p: ProductRow) {
                   )
                 })}
 
-                {products.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No products.</div>}
+                {products.length === 0 && <div className="px-4 py-6 text-sm text-[var(--muted)]">No products.</div>}
               </div>
             )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-      {/* EDIT MODAL */}
-      {editOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-xl glass rounded-2xl border border-[var(--cardBorder)] p-6">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <div className="text-sm font-semibold">Edit Agent</div>
-                <div className="text-xs text-[var(--muted)] mt-1">{editTarget?.email || '—'}</div>
-              </div>
-              <button onClick={() => setEditOpen(false)} className={btnGlass}>
-                Close
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="First Name">
-                <input
-                  className={inputCls}
-                  value={edit.first_name}
-                  onChange={(e) => setEdit((p) => ({ ...p, first_name: e.target.value }))}
-                />
-              </Field>
-
-              <Field label="Last Name">
-                <input
-                  className={inputCls}
-                  value={edit.last_name}
-                  onChange={(e) => setEdit((p) => ({ ...p, last_name: e.target.value }))}
-                />
-              </Field>
-
-              <Field label="Role">
-                <select className={inputCls} value={edit.role} onChange={(e) => setEdit((p) => ({ ...p, role: e.target.value }))}>
-                  <option value="agent">agent</option>
-                  <option value="admin">admin</option>
-                </select>
-              </Field>
-
-              <Field label="Agency Owner">
-                <select
-                  className={inputCls}
-                  value={edit.is_agency_owner ? 'yes' : 'no'}
-                  onChange={(e) => setEdit((p) => ({ ...p, is_agency_owner: e.target.value === 'yes' }))}
-                >
-                  <option value="no">no</option>
-                  <option value="yes">yes</option>
-                </select>
-              </Field>
-
-              <Field label="Comp">
-                <select className={inputCls} value={String(edit.comp)} onChange={(e) => setEdit((p) => ({ ...p, comp: Number(e.target.value) }))}>
-                  {COMP_VALUES.map((n) => (
-                    <option key={n} value={n}>
-                      {n}%
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Upline">
-                <select className={inputCls} value={edit.upline_id} onChange={(e) => setEdit((p) => ({ ...p, upline_id: e.target.value }))}>
-                  <option value="">select</option>
-                  {uplineOptions.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Theme">
-                <select className={inputCls} value={edit.theme} onChange={(e) => setEdit((p) => ({ ...p, theme: e.target.value }))}>
-                  {THEMES.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <button
-              onClick={saveEdit}
-              disabled={editSaving}
-              className={saveWide + (editSaving ? ' opacity-50 cursor-not-allowed' : '')}
-            >
-              {editSaving ? 'Saving…' : 'Save Changes'}
-            </button>
           </div>
         </div>
       )}
@@ -713,9 +997,7 @@ async function deleteProduct(p: ProductRow) {
                     </option>
                   ))}
                 </select>
-                <div className="text-[11px] text-[var(--muted2)] mt-2">
-                  Changing theme updates the entire platform once saved.
-                </div>
+                <div className="text-[11px] text-[var(--muted2)] mt-2">Changing theme updates the entire platform once saved.</div>
               </Field>
 
               <Field label="Profile Picture (Upload)">
@@ -742,19 +1024,11 @@ async function deleteProduct(p: ProductRow) {
               <div className="mt-5 rounded-2xl border border-[var(--cardBorder)] bg-[var(--card)] p-4 flex items-center gap-4">
                 <div className="text-xs text-[var(--muted)]">Preview</div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={avatarPreview}
-                  alt="avatar"
-                  className="h-12 w-12 rounded-2xl border border-[var(--cardBorder)] object-cover"
-                />
+                <img src={avatarPreview} alt="avatar" className="h-12 w-12 rounded-2xl border border-[var(--cardBorder)] object-cover" />
               </div>
             )}
 
-            <button
-              onClick={saveProfile}
-              disabled={savingProfile}
-              className={saveWide + (savingProfile ? ' opacity-50 cursor-not-allowed' : '')}
-            >
+            <button onClick={saveProfile} disabled={savingProfile} className={saveWide + (savingProfile ? ' opacity-50 cursor-not-allowed' : '')}>
               {savingProfile ? 'Saving…' : 'Save Profile'}
             </button>
           </div>
@@ -829,9 +1103,7 @@ async function deleteProduct(p: ProductRow) {
 
                       <div className="col-span-4 text-[var(--muted)]">{a.email || '—'}</div>
                       <div className="col-span-2 text-center text-[var(--muted)]">{a.role || 'agent'}</div>
-                      <div className="col-span-2 text-right text-[var(--muted)]">
-                        {typeof a.comp === 'number' ? `${a.comp}%` : '—'}
-                      </div>
+                      <div className="col-span-2 text-right text-[var(--muted)]">{typeof a.comp === 'number' ? `${a.comp}%` : '—'}</div>
 
                       <div className="col-span-1 flex justify-end gap-2">
                         <button
@@ -873,9 +1145,7 @@ async function deleteProduct(p: ProductRow) {
                   )
                 })}
 
-              {!loadingAgents && filteredAgents.length === 0 && (
-                <div className="px-4 py-6 text-sm text-[var(--muted)]">No agents.</div>
-              )}
+              {!loadingAgents && filteredAgents.length === 0 && <div className="px-4 py-6 text-sm text-[var(--muted)]">No agents.</div>}
             </div>
 
             {/* INVITE MODAL */}
@@ -894,35 +1164,19 @@ async function deleteProduct(p: ProductRow) {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Field label="First Name">
-                      <input
-                        className={inputCls}
-                        value={invite.first_name}
-                        onChange={(e) => setInvite((p) => ({ ...p, first_name: e.target.value }))}
-                      />
+                      <input className={inputCls} value={invite.first_name} onChange={(e) => setInvite((p) => ({ ...p, first_name: e.target.value }))} />
                     </Field>
 
                     <Field label="Last Name">
-                      <input
-                        className={inputCls}
-                        value={invite.last_name}
-                        onChange={(e) => setInvite((p) => ({ ...p, last_name: e.target.value }))}
-                      />
+                      <input className={inputCls} value={invite.last_name} onChange={(e) => setInvite((p) => ({ ...p, last_name: e.target.value }))} />
                     </Field>
 
                     <Field label="Email">
-                      <input
-                        className={inputCls}
-                        value={invite.email}
-                        onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))}
-                      />
+                      <input className={inputCls} value={invite.email} onChange={(e) => setInvite((p) => ({ ...p, email: e.target.value }))} />
                     </Field>
 
                     <Field label="Role">
-                      <select
-                        className={inputCls}
-                        value={invite.role}
-                        onChange={(e) => setInvite((p) => ({ ...p, role: e.target.value }))}
-                      >
+                      <select className={inputCls} value={invite.role} onChange={(e) => setInvite((p) => ({ ...p, role: e.target.value }))}>
                         <option value="agent">agent</option>
                         <option value="admin">admin</option>
                       </select>
@@ -940,11 +1194,7 @@ async function deleteProduct(p: ProductRow) {
                     </Field>
 
                     <Field label="Comp">
-                      <select
-                        className={inputCls}
-                        value={String(invite.comp)}
-                        onChange={(e) => setInvite((p) => ({ ...p, comp: Number(e.target.value) }))}
-                      >
+                      <select className={inputCls} value={String(invite.comp)} onChange={(e) => setInvite((p) => ({ ...p, comp: Number(e.target.value) }))}>
                         {COMP_VALUES.map((n) => (
                           <option key={n} value={n}>
                             {n}%
@@ -954,11 +1204,7 @@ async function deleteProduct(p: ProductRow) {
                     </Field>
 
                     <Field label="Upline">
-                      <select
-                        className={inputCls}
-                        value={invite.upline_id}
-                        onChange={(e) => setInvite((p) => ({ ...p, upline_id: e.target.value }))}
-                      >
+                      <select className={inputCls} value={invite.upline_id} onChange={(e) => setInvite((p) => ({ ...p, upline_id: e.target.value }))}>
                         <option value="">select</option>
                         {uplineOptions.map((u) => (
                           <option key={u.id} value={u.id}>
@@ -969,11 +1215,7 @@ async function deleteProduct(p: ProductRow) {
                     </Field>
 
                     <Field label="Theme">
-                      <select
-                        className={inputCls}
-                        value={invite.theme}
-                        onChange={(e) => setInvite((p) => ({ ...p, theme: e.target.value }))}
-                      >
+                      <select className={inputCls} value={invite.theme} onChange={(e) => setInvite((p) => ({ ...p, theme: e.target.value }))}>
                         {THEMES.map((t) => (
                           <option key={t.key} value={t.key}>
                             {t.label}
@@ -984,11 +1226,7 @@ async function deleteProduct(p: ProductRow) {
                     </Field>
                   </div>
 
-                  <button
-                    onClick={inviteAgent}
-                    disabled={inviting}
-                    className={saveWide + (inviting ? ' opacity-50 cursor-not-allowed' : '')}
-                  >
+                  <button onClick={inviteAgent} disabled={inviting} className={saveWide + (inviting ? ' opacity-50 cursor-not-allowed' : '')}>
                     {inviting ? 'Sending…' : 'Send Invite'}
                   </button>
                 </div>
@@ -1005,11 +1243,7 @@ async function deleteProduct(p: ProductRow) {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
               <Field label="Select User">
-                <select
-                  className={inputCls}
-                  value={pos.user_id}
-                  onChange={(e) => setPos((p) => ({ ...p, user_id: e.target.value }))}
-                >
+                <select className={inputCls} value={pos.user_id} onChange={(e) => setPos((p) => ({ ...p, user_id: e.target.value }))}>
                   <option value="">select</option>
                   {uplineOptions.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -1041,20 +1275,11 @@ async function deleteProduct(p: ProductRow) {
               </Field>
 
               <Field label="Effective Date (optional)">
-                <input
-                  className={inputCls}
-                  value={pos.effective_date}
-                  onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))}
-                  placeholder="YYYY-MM-DD"
-                />
+                <input className={inputCls} value={pos.effective_date} onChange={(e) => setPos((p) => ({ ...p, effective_date: e.target.value }))} placeholder="YYYY-MM-DD" />
               </Field>
             </div>
 
-            <button
-              onClick={updatePosition}
-              disabled={savingPosition}
-              className={saveWide + (savingPosition ? ' opacity-50 cursor-not-allowed' : '')}
-            >
+            <button onClick={updatePosition} disabled={savingPosition} className={saveWide + (savingPosition ? ' opacity-50 cursor-not-allowed' : '')}>
               {savingPosition ? 'Saving…' : 'Save Position'}
             </button>
           </div>
@@ -1066,7 +1291,7 @@ async function deleteProduct(p: ProductRow) {
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Carriers</div>
-                <div className="text-xs text-[var(--muted)] mt-1">Create and maintain carrier records. (Sort order required.)</div>
+                <div className="text-xs text-[var(--muted)] mt-1">Carrier | Supported Name | Advance | Sort | Products | Actions</div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -1103,35 +1328,49 @@ async function deleteProduct(p: ProductRow) {
               <div className="rounded-2xl border border-[var(--cardBorder)] overflow-hidden">
                 <div className="grid grid-cols-12 px-4 py-3 border-b border-[var(--cardBorder)] text-[11px] text-[var(--muted)] bg-[var(--card)]">
                   <div className="col-span-3">Carrier</div>
-                  <div className="col-span-2">Supported</div>
+                  <div className="col-span-3">Supported Name</div>
                   <div className="col-span-2 text-right">Advance</div>
-                  <div className="col-span-2 text-right">Sort</div>
-                  <div className="col-span-3 text-right">Links</div>
+                  <div className="col-span-1 text-right">Sort</div>
+                  <div className="col-span-2 text-center">Products</div>
+                  <div className="col-span-1 text-right">Actions</div>
                 </div>
 
                 {filteredCarriers.map((c) => (
                   <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-[var(--cardBorder)] text-sm items-center">
                     <div className="col-span-3 font-semibold">{c.name}</div>
-                    <div className="col-span-2 text-[var(--muted)]">{c.supported_name || '—'}</div>
+                    <div className="col-span-3 text-[var(--muted)]">{c.supported_name || '—'}</div>
                     <div className="col-span-2 text-right text-[var(--muted)]">{Number(c.advance_rate || 0).toFixed(2)}</div>
-                    <div className="col-span-2 text-right text-[var(--muted)]">{c.sort_order}</div>
-                    <div className="col-span-3 text-right text-xs text-[var(--muted)]">
-                      {c.eapp_url ? (
-                        <a className="hover:text-[var(--text)] underline" href={c.eapp_url} target="_blank" rel="noreferrer">
-                          Eapp
-                        </a>
-                      ) : (
-                        '—'
-                      )}
-                      {c.portal_url ? (
-                        <>
-                          {' '}
-                          •{' '}
-                          <a className="hover:text-[var(--text)] underline" href={c.portal_url} target="_blank" rel="noreferrer">
-                            Portal
-                          </a>
-                        </>
-                      ) : null}
+                    <div className="col-span-1 text-right text-[var(--muted)]">{c.sort_order}</div>
+
+                    <div className="col-span-2 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => openProducts(c)}
+                        className="rounded-xl border border-[var(--cardBorder)] bg-[var(--card)] hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
+                        title="Manage products"
+                      >
+                        Manage
+                      </button>
+                    </div>
+
+                    <div className="col-span-1 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openCarrierEdit(c)}
+                        className="rounded-xl border border-[var(--cardBorder)] bg-[var(--card)] hover:bg-white/10 transition px-2 py-2"
+                        title="Edit"
+                      >
+                        ✏️
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteCarrier(c)}
+                        className="rounded-xl border border-[var(--cardBorder)] bg-[var(--card)] hover:bg-red-600/30 transition px-2 py-2"
+                        title="Delete"
+                      >
+                        🗑
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1198,6 +1437,7 @@ async function deleteProduct(p: ProductRow) {
                         className={inputCls}
                         value={newCarrier.support_phone}
                         onChange={(e) => setNewCarrier((p) => ({ ...p, support_phone: e.target.value }))}
+                        placeholder="(888) 888-8888"
                       />
                     </Field>
 
@@ -1208,20 +1448,12 @@ async function deleteProduct(p: ProductRow) {
 
                   <div className="mt-4 flex items-center gap-2">
                     <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
-                      <input
-                        type="checkbox"
-                        checked={newCarrier.active}
-                        onChange={(e) => setNewCarrier((p) => ({ ...p, active: e.target.checked }))}
-                      />
+                      <input type="checkbox" checked={newCarrier.active} onChange={(e) => setNewCarrier((p) => ({ ...p, active: e.target.checked }))} />
                       Active
                     </label>
                   </div>
 
-                  <button
-                    onClick={createCarrier}
-                    disabled={creatingCarrier}
-                    className={saveWide + (creatingCarrier ? ' opacity-50 cursor-not-allowed' : '')}
-                  >
+                  <button onClick={createCarrier} disabled={creatingCarrier} className={saveWide + (creatingCarrier ? ' opacity-50 cursor-not-allowed' : '')}>
                     {creatingCarrier ? 'Creating…' : 'Create Carrier'}
                   </button>
                 </div>
@@ -1248,12 +1480,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
-          onClick={onClick}
+      onClick={onClick}
       className={[
         'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
-        active
-          ? 'border-white/20 bg-white/10'
-          : 'border-white/10 bg-white/5 hover:bg-white/10',
+        active ? 'border-white/20 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10',
       ].join(' ')}
     >
       {children}
@@ -1267,14 +1497,8 @@ const inputCls =
 const btnGlass =
   'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold'
 
-const btnSoft =
-  'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
 
-/**
- * ✅ Theme-aware buttons:
- * Your ThemeProvider sets --accent and --accent2.
- * These buttons now follow the selected theme automatically.
- */
 const saveBtn =
   'rounded-2xl px-4 py-2 text-sm font-semibold transition shadow-[0_0_0_1px_rgba(255,255,255,0.08)] bg-[var(--accent)] hover:opacity-90 text-[var(--accentText)]'
 
