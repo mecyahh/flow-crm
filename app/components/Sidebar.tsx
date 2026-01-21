@@ -3,7 +3,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
 const NAV = [
@@ -28,10 +28,6 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
 
-  // ✅ Dock-like hover reveal (always “there”)
-  const [open, setOpen] = useState(false)
-  const closeTimer = useRef<number | null>(null)
-
   // ✅ Profile (big + sync)
   const [me, setMe] = useState<Me | null>(null)
 
@@ -44,23 +40,25 @@ export default function Sidebar() {
         const u = uRes.user
         if (!u) return
 
+        // Try profiles.avatar_url first (if present), fallback to auth metadata
         let avatarUrl = ''
         let fullName = ''
         let email = u.email || ''
 
         try {
-          const { data: prof } = await supabase
+          const { data: prof, error } = await supabase
             .from('profiles')
             .select('first_name,last_name,email,avatar_url')
             .eq('id', u.id)
             .single()
 
-          fullName =
-            `${(prof as any)?.first_name || ''} ${(prof as any)?.last_name || ''}`.trim() || ''
-          email = (prof as any)?.email || email
-          avatarUrl = String((prof as any)?.avatar_url || '')
+          if (!error && prof) {
+            fullName = `${(prof as any).first_name || ''} ${(prof as any).last_name || ''}`.trim()
+            email = String((prof as any).email || email || '')
+            avatarUrl = String((prof as any).avatar_url || '')
+          }
         } catch {
-          // fallback
+          // ignore; fallback below
         }
 
         const meta: any = u.user_metadata || {}
@@ -70,7 +68,12 @@ export default function Sidebar() {
         const name = fullName || (email ? email.split('@')[0] : 'Agent')
 
         if (!alive) return
-        setMe({ id: u.id, name, email: email || '', avatarUrl })
+        setMe({
+          id: u.id,
+          name,
+          email: email || '',
+          avatarUrl,
+        })
       } catch {
         // ignore
       }
@@ -90,16 +93,6 @@ export default function Sidebar() {
     return (a + b).toUpperCase()
   }, [me?.name])
 
-  function scheduleClose() {
-    if (closeTimer.current) window.clearTimeout(closeTimer.current)
-    closeTimer.current = window.setTimeout(() => setOpen(false), 650)
-  }
-
-  function cancelClose() {
-    if (closeTimer.current) window.clearTimeout(closeTimer.current)
-    closeTimer.current = null
-  }
-
   async function logout() {
     try {
       await supabase.auth.signOut()
@@ -109,112 +102,84 @@ export default function Sidebar() {
   }
 
   return (
-    <>
-      {/* ✅ Always-present hover strip (like a dock “hot zone”) */}
-      <div
-        className="fixed left-0 top-0 z-40 h-screen w-4"
-        onMouseEnter={() => {
-          cancelClose()
-          setOpen(true)
-        }}
-      />
-
-      <aside
-        onMouseEnter={() => {
-          cancelClose()
-          setOpen(true)
-        }}
-        onMouseLeave={scheduleClose}
-        onFocusCapture={() => {
-          cancelClose()
-          setOpen(true)
-        }}
-        className={[
-          // ✅ This is always mounted; it slides in/out on hover
-          'fixed left-0 top-0 z-40 h-screen w-72 p-6 border-r border-white/10',
-          'bg-[#070a12]/92 backdrop-blur-xl',
-          'transition-all duration-300',
-          open ? 'translate-x-0 opacity-100' : '-translate-x-64 opacity-0 pointer-events-none',
-        ].join(' ')}
-      >
-        {/* Header */}
-        <div className="mb-7 flex items-center gap-4">
-          <div className="relative h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-white/5">
-            {me?.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={me.avatarUrl}
-                alt="Profile"
-                className="h-full w-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="h-full w-full flex items-center justify-center text-lg font-extrabold text-white/80">
-                {initials}
-              </div>
-            )}
-
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute -inset-8 rounded-full bg-white/5 blur-2xl" />
+    <aside className="fixed left-0 top-0 z-40 h-screen w-72 p-6 border-r border-white/10 bg-[#070a12]/92 backdrop-blur-xl">
+      {/* Header */}
+      <div className="mb-7 flex items-center gap-4">
+        {/* ✅ BIG profile icon */}
+        <div className="relative h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-white/5">
+          {me?.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={me.avatarUrl}
+              alt="Profile"
+              className="h-full w-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center text-lg font-extrabold text-white/80">
+              {initials}
             </div>
-          </div>
+          )}
 
-          <div className="min-w-0">
-            <div className="text-lg font-semibold tracking-tight leading-tight">Flow</div>
-            <div className="text-[11px] text-white/55 mt-1 truncate">
-              {me?.name ? me.name : 'Deal tracking'}
-            </div>
+          {/* subtle glow */}
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -inset-8 rounded-full bg-white/5 blur-2xl" />
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex flex-col gap-1.5">
-          {NAV.map((item) => {
-            const active = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={[
-                  'rounded-xl px-4 py-3 transition border flex items-center justify-between',
-                  'text-[13px] font-medium',
-                  active
-                    ? 'bg-white/10 border-white/15'
-                    : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10',
-                ].join(' ')}
-              >
-                <span className="text-white/90">{item.label}</span>
-                {active ? (
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{
-                      background: 'var(--accent)',
-                      boxShadow: '0 0 18px var(--glow)',
-                    }}
-                  />
-                ) : null}
-              </Link>
-            )
-          })}
-        </nav>
-
-        {/* Bottom area */}
-        <div className="absolute bottom-6 left-6 right-6">
-          <div className="h-px bg-white/10 mb-4" />
-
-          {/* ✅ Glass red hover logout */}
-          <button
-            onClick={logout}
-            className={[
-              'w-full rounded-2xl border border-white/10 bg-white/5',
-              'transition px-4 py-3 text-[13px] font-semibold text-white/85',
-              'hover:bg-red-500/12 hover:border-red-400/25 hover:text-red-200',
-            ].join(' ')}
-          >
-            Logout
-          </button>
+        <div className="min-w-0">
+          <div className="text-lg font-semibold tracking-tight leading-tight">Flow</div>
+          <div className="text-[11px] text-white/55 mt-1 truncate">{me?.name ? me.name : 'Deal tracking'}</div>
         </div>
-      </aside>
-    </>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex flex-col gap-1.5">
+        {NAV.map((item) => {
+          const active = pathname === item.href
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={[
+                'rounded-xl px-4 py-3 transition border flex items-center justify-between',
+                // ✅ slightly smaller category text
+                'text-[13px] font-medium',
+                active
+                  ? 'bg-white/10 border-white/15'
+                  : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10',
+              ].join(' ')}
+            >
+              <span className="text-white/90">{item.label}</span>
+              {active ? (
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{
+                    background: 'var(--accent)',
+                    boxShadow: '0 0 18px var(--glow)',
+                  }}
+                />
+              ) : null}
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* Bottom */}
+      <div className="absolute bottom-6 left-6 right-6">
+        <div className="h-px bg-white/10 mb-4" />
+
+        {/* ✅ Logout: transparent glass + red hover */}
+        <button
+          onClick={logout}
+          className={[
+            'w-full rounded-2xl border border-white/10 bg-white/5 transition px-4 py-3 text-[13px] font-semibold text-white/85',
+            'hover:bg-red-500/15 hover:border-red-400/25 hover:text-red-200',
+          ].join(' ')}
+        >
+          Logout
+        </button>
+      </div>
+    </aside>
   )
 }
