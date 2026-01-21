@@ -3,7 +3,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
@@ -24,6 +24,8 @@ type ProductRow = {
   sort_order: number | null
   is_active: boolean | null
 }
+
+type SourceOpt = 'Inbound' | 'Readymode' | 'Referral' | 'Warm-Market'
 
 export default function PostDealPage() {
   const router = useRouter()
@@ -48,6 +50,14 @@ export default function PostDealPage() {
   const [coverage, setCoverage] = useState('')
   const [premium, setPremium] = useState('')
   const [policy_number, setPolicyNumber] = useState('')
+
+  // ✅ NEW FIELDS
+  const [referrals_collected, setReferralsCollected] = useState('0') // preset 0
+  const [source, setSource] = useState<SourceOpt>('Inbound')
+
+  // ✅ Confetti overlay
+  const [confettiOn, setConfettiOn] = useState(false)
+  const confettiKeyRef = useRef(0)
 
   useEffect(() => {
     boot()
@@ -156,6 +166,14 @@ export default function PostDealPage() {
     if (coverage && (!Number.isFinite(covNum as any) || (covNum as any) <= 0))
       return setToast('Coverage must be a valid number')
 
+    // ✅ Policy number lock: at least 6 chars (if provided)
+    const pol = policy_number.trim()
+    if (pol && pol.length < 6) return setToast('Policy # must be at least 6 characters')
+
+    // ✅ Referrals collected: numeric, >= 0
+    const refs = Number(String(referrals_collected || '0').replace(/[^0-9]/g, ''))
+    if (!Number.isFinite(refs) || refs < 0) return setToast('Referrals collected must be 0 or more')
+
     setSaving(true)
     try {
       const { data: u } = await supabase.auth.getUser()
@@ -174,13 +192,19 @@ export default function PostDealPage() {
         phone: phone ? phone : null,
         dob: dob || null,
         company: company.trim(),
-        policy_number: policy_number.trim() || null,
+        policy_number: pol || null,
         coverage: covNum,
         premium: premNum,
 
         status: 'submitted',
-        // store extra fields without new columns
-        note: buildNote({ product_name, effective_date }),
+
+        // ✅ store extra fields without new columns
+        note: buildNote({
+          product_name,
+          effective_date,
+          referrals_collected: refs,
+          source,
+        }),
       }
 
       const { data: inserted, error } = await supabase.from('deals').insert(payload).select('id').single()
@@ -188,9 +212,14 @@ export default function PostDealPage() {
 
       if (inserted?.id) fireDiscordWebhook(inserted.id)
 
-      // ✅ route back to dashboard with refreshed data
-      router.push('/dashboard')
-      router.refresh()
+      // ✅ Confetti burst on success
+      triggerConfetti()
+
+      // ✅ route back to dashboard with refreshed data (keep behavior)
+      setTimeout(() => {
+        router.push('/dashboard')
+        router.refresh()
+      }, 900)
     } catch (e: any) {
       setToast(e?.message || 'Submit failed')
       setSaving(false)
@@ -198,9 +227,18 @@ export default function PostDealPage() {
     }
   }
 
+  function triggerConfetti() {
+    confettiKeyRef.current += 1
+    setConfettiOn(true)
+    window.setTimeout(() => setConfettiOn(false), 900)
+  }
+
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
+
+      {/* ✅ Confetti Overlay */}
+      {confettiOn && <ConfettiBurst key={confettiKeyRef.current} />}
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
@@ -219,9 +257,7 @@ export default function PostDealPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Post a Deal</h1>
-            <p className="text-sm text-white/60 mt-1">
-              Great Job ! Once You Post Your Deal, Go Get Another One!
-            </p>
+            <p className="text-sm text-white/60 mt-1">Great Job ! Once You Post Your Deal, Go Get Another One!</p>
           </div>
 
           <button onClick={() => router.push('/dashboard')} className={btnGlass}>
@@ -233,124 +269,195 @@ export default function PostDealPage() {
           {loading ? (
             <div className="px-6 py-10 text-center text-white/60">Loading…</div>
           ) : (
-            <div className="max-w-2xl">
-              {/* ✅ Vertical drop-aligned layout */}
-              <div className="space-y-4">
-                <Field label="Client Name">
-                  <input
-                    className={inputCls}
-                    value={full_name}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Client name"
-                  />
-                </Field>
-
-                <Field label="Phone">
-                  <input
-                    className={inputCls}
-                    value={phone}
-                    onChange={(e) => setPhone(formatPhone(e.target.value))}
-                    placeholder="(888) 888-8888"
-                    inputMode="tel"
-                  />
-                </Field>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="DOB">
-                    <FlowDatePicker value={dob} onChange={setDob} placeholder="Select DOB" />
-                  </Field>
-
-                  <Field label="Effective Date">
-                    <FlowDatePicker value={effective_date} onChange={setEffectiveDate} placeholder="Select Effective Date" />
-                  </Field>
-                </div>
-
-                <Field label="Carrier">
-                  <select
-                    className={inputCls}
-                    value={carrier_id}
-                    onChange={(e) => {
-                      const cid = e.target.value
-                      setCarrierId(cid)
-
-                      const picked = carrierOptions.find((x) => x.id === cid)
-                      const carrierName = picked?.label || ''
-                      setCompany(carrierName)
-                    }}
-                  >
-                    <option value="">Select carrier…</option>
-                    {carrierOptions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field label="Product">
-                  <select
-                    className={[inputCls, !carrier_id ? 'opacity-50 cursor-not-allowed' : ''].join(' ')}
-                    value={product_name}
-                    onChange={(e) => setProductName(e.target.value)}
-                    disabled={!carrier_id}
-                  >
-                    <option value="">{carrier_id ? 'Select product…' : 'Select carrier first…'}</option>
-                    {productOptions.map((p) => (
-                      <option key={p.id} value={p.label}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Coverage">
+            // ✅ Same behavior, but now we give open space on the right (layout only)
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="max-w-2xl">
+                {/* ✅ Vertical drop-aligned layout */}
+                <div className="space-y-4">
+                  <Field label="Client Name">
                     <input
                       className={inputCls}
-                      value={coverage}
-                      onChange={(e) => setCoverage(moneyInput(e.target.value))}
-                      onBlur={() => setCoverage(formatMoneyInput(coverage))}
-                      placeholder="$100,000"
-                      inputMode="decimal"
+                      value={full_name}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Client name"
                     />
                   </Field>
 
-                  <Field label="Premium">
+                  <Field label="Phone">
                     <input
                       className={inputCls}
-                      value={premium}
-                      onChange={(e) => setPremium(moneyInput(e.target.value))}
-                      onBlur={() => setPremium(formatMoneyInput(premium))}
-                      placeholder="$100"
-                      inputMode="decimal"
+                      value={phone}
+                      onChange={(e) => setPhone(formatPhone(e.target.value))}
+                      placeholder="(888) 888-8888"
+                      inputMode="tel"
                     />
+                  </Field>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="DOB">
+                      <FlowDatePicker value={dob} onChange={setDob} placeholder="Select DOB" />
+                    </Field>
+
+                    <Field label="Effective Date">
+                      <FlowDatePicker value={effective_date} onChange={setEffectiveDate} placeholder="Select Effective Date" />
+                    </Field>
+                  </div>
+
+                  <Field label="Carrier">
+                    <select
+                      className={inputCls}
+                      value={carrier_id}
+                      onChange={(e) => {
+                        const cid = e.target.value
+                        setCarrierId(cid)
+
+                        const picked = carrierOptions.find((x) => x.id === cid)
+                        const carrierName = picked?.label || ''
+                        setCompany(carrierName)
+                      }}
+                    >
+                      <option value="">Select carrier…</option>
+                      {carrierOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Product">
+                    <select
+                      className={[inputCls, !carrier_id ? 'opacity-50 cursor-not-allowed' : ''].join(' ')}
+                      value={product_name}
+                      onChange={(e) => setProductName(e.target.value)}
+                      disabled={!carrier_id}
+                    >
+                      <option value="">{carrier_id ? 'Select product…' : 'Select carrier first…'}</option>
+                      {productOptions.map((p) => (
+                        <option key={p.id} value={p.label}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  {/* ✅ NEW: Source dropdown */}
+                  <Field label="Source">
+                    <select className={inputCls} value={source} onChange={(e) => setSource(e.target.value as SourceOpt)}>
+                      <option value="Inbound">Inbound</option>
+                      <option value="Readymode">Readymode</option>
+                      <option value="Referral">Referral</option>
+                      <option value="Warm-Market">Warm-Market</option>
+                    </select>
+                  </Field>
+
+                  {/* ✅ NEW: Referrals collected */}
+                  <Field label="Referrals Collected">
+                    <input
+                      className={inputCls}
+                      value={referrals_collected}
+                      onChange={(e) => setReferralsCollected(intInput(e.target.value))}
+                      placeholder="0"
+                      inputMode="numeric"
+                    />
+                  </Field>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="Coverage">
+                      <input
+                        className={inputCls}
+                        value={coverage}
+                        onChange={(e) => setCoverage(moneyInput(e.target.value))}
+                        onBlur={() => setCoverage(formatMoneyInput(coverage))}
+                        placeholder="$100,000"
+                        inputMode="decimal"
+                      />
+                    </Field>
+
+                    <Field label="Premium">
+                      <input
+                        className={inputCls}
+                        value={premium}
+                        onChange={(e) => setPremium(moneyInput(e.target.value))}
+                        onBlur={() => setPremium(formatMoneyInput(premium))}
+                        placeholder="$100"
+                        inputMode="decimal"
+                      />
+                    </Field>
+                  </div>
+
+                  <Field label="Policy #">
+                    <input
+                      className={inputCls}
+                      value={policy_number}
+                      onChange={(e) => setPolicyNumber(e.target.value)}
+                      placeholder="Policy number (min 6 chars)"
+                    />
+                    <div className="mt-2 text-[11px] text-white/45">Must be 6+ characters to submit.</div>
                   </Field>
                 </div>
 
-                <Field label="Policy #">
-                  <input
-                    className={inputCls}
-                    value={policy_number}
-                    onChange={(e) => setPolicyNumber(e.target.value)}
-                    placeholder="Policy number"
-                  />
-                </Field>
+                <button
+                  onClick={submit}
+                  disabled={saving}
+                  className={[
+                    'mt-6 w-full rounded-2xl transition px-4 py-3 text-sm font-semibold',
+                    saving ? 'bg-white/10 border border-white/10 text-white/60 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500',
+                  ].join(' ')}
+                >
+                  {saving ? 'Submitting…' : 'Submit Deal'}
+                </button>
               </div>
 
-              <button
-                onClick={submit}
-                disabled={saving}
-                className={[
-                  'mt-6 w-full rounded-2xl transition px-4 py-3 text-sm font-semibold',
-                  saving
-                    ? 'bg-white/10 border border-white/10 text-white/60 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-500',
-                ].join(' ')}
-              >
-                {saving ? 'Submitting…' : 'Submit Deal'}
-              </button>
+              {/* ✅ Open Space on right-hand side (no behavioral changes) */}
+              <div className="hidden lg:block">
+                <div className="h-full rounded-2xl border border-white/10 bg-white/5 overflow-hidden relative">
+                  <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute -top-24 -right-24 w-[420px] h-[420px] rounded-full bg-blue-500/10 blur-3xl" />
+                    <div className="absolute -bottom-24 -left-24 w-[420px] h-[420px] rounded-full bg-white/5 blur-3xl" />
+                  </div>
 
-              
+                  <div className="relative p-6 h-full flex flex-col justify-between">
+                    <div>
+                      <div className="text-sm font-semibold">Keep it moving.</div>
+                      <div className="mt-2 text-sm text-white/60">
+                        Post the deal clean — then go get another one.
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                      <div className="text-xs text-white/60">Live check</div>
+                      <div className="mt-3 space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Carrier</span>
+                          <span className="font-semibold">{company || '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Product</span>
+                          <span className="font-semibold">{product_name || '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Premium</span>
+                          <span className="font-semibold">{premium ? formatMoneyInput(premium) : '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Source</span>
+                          <span className="font-semibold">{source}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/60">Referrals</span>
+                          <span className="font-semibold">{referrals_collected || '0'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-white/45">
+                      * Right panel is intentionally open space — keeps the form clean and fast.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
         </div>
@@ -384,12 +491,16 @@ function moneyInput(v: string) {
   return `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}`
 }
 
+function intInput(v: string) {
+  return String(v || '').replace(/[^0-9]/g, '').slice(0, 4) || '0'
+}
+
 function toMoneyNumber(v: string) {
   const num = Number(String(v || '').replace(/[^0-9.]/g, ''))
   return Number.isFinite(num) ? num : NaN
 }
 
- // format to $X,XXX.XX on blur — NO rounding
+// format to $X,XXX.XX on blur — NO rounding
 function formatMoneyInput(v: string) {
   const n = toMoneyNumber(v)
   if (!Number.isFinite(n)) return ''
@@ -400,11 +511,77 @@ function formatMoneyInput(v: string) {
   })}`
 }
 
-function buildNote({ product_name, effective_date }: { product_name: string; effective_date: string }) {
+function buildNote({
+  product_name,
+  effective_date,
+  referrals_collected,
+  source,
+}: {
+  product_name: string
+  effective_date: string
+  referrals_collected: number
+  source: string
+}) {
   const lines: string[] = []
   if (product_name) lines.push(`Product: ${product_name}`)
   if (effective_date) lines.push(`Effective: ${effective_date}`)
+  lines.push(`Source: ${source}`)
+  lines.push(`Referrals: ${referrals_collected}`)
   return lines.length ? lines.join(' | ') : null
+}
+
+/* ---------- confetti ---------- */
+
+function ConfettiBurst() {
+  // simple, dependency-free burst (fast + pretty)
+  const pieces = useMemo(() => {
+    const out: { left: number; delay: number; dur: number; rot: number; size: number }[] = []
+    for (let i = 0; i < 42; i++) {
+      out.push({
+        left: Math.random() * 100,
+        delay: Math.random() * 0.12,
+        dur: 0.7 + Math.random() * 0.45,
+        rot: Math.random() * 360,
+        size: 6 + Math.random() * 10,
+      })
+    }
+    return out
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-[9999] pointer-events-none overflow-hidden">
+      {pieces.map((p, i) => (
+        <span
+          key={i}
+          className="absolute top-[-12px] rounded-sm opacity-90"
+          style={{
+            left: `${p.left}%`,
+            width: `${p.size}px`,
+            height: `${Math.max(6, p.size * 0.6)}px`,
+            background: `hsla(${Math.floor(Math.random() * 360)}, 90%, 60%, 0.95)`,
+            transform: `rotate(${p.rot}deg)`,
+            animation: `confettiFall ${p.dur}s ease-out ${p.delay}s forwards`,
+          }}
+        />
+      ))}
+
+      <style jsx>{`
+        @keyframes confettiFall {
+          0% {
+            transform: translateY(-10px) rotate(0deg);
+            opacity: 0;
+          }
+          10% {
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(110vh) rotate(720deg);
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </div>
+  )
 }
 
 const inputCls =
