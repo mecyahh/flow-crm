@@ -299,7 +299,7 @@ export default function LeaderboardPage() {
 
         {/* ✅ 3 stat cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <MiniStat label="Agency Production (AP)" value={loading ? '—' : `$${formatMoney(agencySummary.productionAP)}`} />
+          <MiniStat label="Agency Production" value={loading ? '—' : `$${formatMoney(agencySummary.productionAP)}`} />
           <MiniStat label="Families Protected" value={loading ? '—' : String(agencySummary.families)} />
           <MiniStat label="Writing Agents" value={loading ? '—' : String(agencySummary.writers)} />
         </div>
