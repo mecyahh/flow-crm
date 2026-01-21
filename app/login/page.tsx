@@ -83,10 +83,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center px-6 py-10">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex items-center justify-center px-6 py-10">
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl max-w-[360px]">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl max-w-[360px]">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -98,14 +98,14 @@ export default function LoginPage() {
       )}
 
       <div className="w-full max-w-[980px] grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="glass rounded-3xl border border-white/10 p-8 overflow-hidden relative">
+        <div className="glass rounded-3xl border border-[var(--border)] p-8 overflow-hidden relative">
           <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-blue-600/20 blur-3xl" />
-          <div className="absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+          <div className="absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-[var(--panel2)] blur-3xl" />
 
           <div className="relative">
-            <div className="text-xs text-white/60">FLOW</div>
+            <div className="text-xs text-[var(--text)]/60">FLOW</div>
             <h1 className="text-3xl font-semibold tracking-tight mt-2">Deal House Portal</h1>
-            <p className="text-sm text-white/60 mt-3 leading-relaxed">
+            <p className="text-sm text-[var(--text)]/60 mt-3 leading-relaxed">
               Clean, glass-theme tracking for production, follow ups, and team momentum.
             </p>
 
@@ -116,18 +116,18 @@ export default function LoginPage() {
               <Feature label="Analytics" desc="Clean signal." />
             </div>
 
-            <div className="mt-8 text-xs text-white/50">
+            <div className="mt-8 text-xs text-[var(--text)]/50">
               By continuing you agree to your agency’s policies.
             </div>
           </div>
         </div>
 
-        <div className="glass rounded-3xl border border-white/10 p-8">
+        <div className="glass rounded-3xl border border-[var(--border)] p-8">
           <div className="flex items-center justify-between">
             <div className="text-lg font-semibold">
               {mode === 'login' ? 'Log in' : mode === 'signup' ? 'Create account' : 'Reset password'}
             </div>
-            <Link href="/dashboard" className="text-xs text-white/60 hover:underline">
+            <Link href="/dashboard" className="text-xs text-[var(--text)]/60 hover:underline">
               Back to dashboard
             </Link>
           </div>
@@ -198,7 +198,7 @@ export default function LoginPage() {
               className={[
                 'w-full rounded-2xl px-4 py-3 text-sm font-semibold transition border',
                 loading || !canSubmit
-                  ? 'bg-white/5 border-white/10 text-white/40 cursor-not-allowed'
+                  ? 'bg-[var(--panel)] border-[var(--border)] text-[var(--text)]/40 cursor-not-allowed'
                   : 'bg-blue-600 border-blue-500/60 hover:bg-blue-500',
               ].join(' ')}
               type="submit"
@@ -212,7 +212,7 @@ export default function LoginPage() {
                 : 'Send reset email'}
             </button>
 
-            <div className="flex items-center justify-between text-xs text-white/60 pt-2">
+            <div className="flex items-center justify-between text-xs text-[var(--text)]/60 pt-2">
               <button
                 type="button"
                 className="hover:underline"
@@ -224,7 +224,7 @@ export default function LoginPage() {
                 <span>{mode === 'login' ? `Don't have an account?` : `Already have an account?`}</span>
                 <button
                   type="button"
-                  className="text-white hover:underline"
+                  className="text-[var(--text)] hover:underline"
                   onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
                 >
                   {mode === 'login' ? 'Create' : 'Log in'}
@@ -232,7 +232,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="text-[11px] text-white/45 pt-2">
+            <div className="text-[11px] text-[var(--text)]/45 pt-2">
               Trouble logging in? Verify you used the invite email and confirmed your account (if enabled).
             </div>
           </form>
@@ -245,7 +245,7 @@ export default function LoginPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -253,9 +253,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Feature({ label, desc }: { label: string; desc: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
       <div className="text-sm font-semibold">{label}</div>
-      <div className="text-xs text-white/60 mt-1">{desc}</div>
+      <div className="text-xs text-[var(--text)]/60 mt-1">{desc}</div>
     </div>
   )
 }
@@ -263,11 +263,11 @@ function Feature({ label, desc }: { label: string; desc: string }) {
 function pill(active: boolean) {
   return [
     'rounded-2xl border px-3 py-2 text-xs font-semibold transition',
-    active ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10 hover:bg-white/10',
+    active ? 'bg-[var(--panel2)] border-white/15' : 'bg-[var(--panel)] border-[var(--border)] hover:bg-[var(--panel2)]',
   ].join(' ')
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'

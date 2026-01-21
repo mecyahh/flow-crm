@@ -105,10 +105,10 @@ export default function FlowDatePicker({
     <div
       ref={popRef}
       // ✅ PORTAL + HUGE Z: guaranteed on top of Analytics UI
-      className="fixed z-[2147483647] w-[320px] rounded-2xl border border-white/10 bg-[#0b0f1a]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+      className="fixed z-[2147483647] w-[320px] rounded-2xl border border-[var(--border)] bg-[var(--bg)]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
       style={{ top: pos.top, left: pos.left }}
     >
-      <div className="px-4 py-3 flex items-center justify-between border-b border-white/10">
+      <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--border)]">
         <button
           type="button"
           onClick={() => {
@@ -117,7 +117,7 @@ export default function FlowDatePicker({
             setViewYear(d.getFullYear())
             setViewMonth(d.getMonth())
           }}
-          className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition"
+          className="h-9 w-9 rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition"
           aria-label="Previous month"
         >
           ‹
@@ -127,7 +127,7 @@ export default function FlowDatePicker({
           <div className="text-sm font-semibold">{monthLabel}</div>
 
           <select
-            className="rounded-xl border border-white/10 bg-white/5 px-2 py-1 text-xs outline-none hover:bg-white/10 transition"
+            className="rounded-xl border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs outline-none hover:bg-[var(--panel2)] transition"
             value={viewYear}
             onChange={(e) => setViewYear(Number(e.target.value))}
             aria-label="Select year"
@@ -148,7 +148,7 @@ export default function FlowDatePicker({
             setViewYear(d.getFullYear())
             setViewMonth(d.getMonth())
           }}
-          className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition"
+          className="h-9 w-9 rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition"
           aria-label="Next month"
         >
           ›
@@ -156,7 +156,7 @@ export default function FlowDatePicker({
       </div>
 
       <div className="px-4 py-3">
-        <div className="grid grid-cols-7 gap-1 text-[11px] text-white/50 mb-2">
+        <div className="grid grid-cols-7 gap-1 text-[11px] text-[var(--text)]/50 mb-2">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
             <div key={d} className="text-center">
               {d}
@@ -182,9 +182,9 @@ export default function FlowDatePicker({
                 className={[
                   'h-10 rounded-xl text-sm transition border',
                   isSelected
-                    ? 'bg-blue-600 border-blue-500/60 text-white'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10',
-                  !isThisMonth ? 'text-white/30' : 'text-white',
+                    ? 'bg-blue-600 border-blue-500/60 text-[var(--text)]'
+                    : 'bg-[var(--panel)] border-[var(--border)] hover:bg-[var(--panel2)]',
+                  !isThisMonth ? 'text-[var(--text)]/30' : 'text-[var(--text)]',
                   isToday && !isSelected ? 'ring-1 ring-white/15' : '',
                 ].join(' ')}
               >
@@ -201,7 +201,7 @@ export default function FlowDatePicker({
               onChange(toISO(new Date()))
               setOpen(false)
             }}
-            className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs"
+            className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-3 py-2 text-xs"
           >
             Today
           </button>
@@ -211,7 +211,7 @@ export default function FlowDatePicker({
               onChange('')
               setOpen(false)
             }}
-            className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs"
+            className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-3 py-2 text-xs"
           >
             Clear
           </button>
@@ -225,12 +225,12 @@ export default function FlowDatePicker({
       <button
         type="button"
         onClick={() => setOpen((s) => !s)}
-        className="w-full text-left rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none hover:bg-white/7 transition flex items-center justify-between"
+        className="w-full text-left rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none hover:bg-white/7 transition flex items-center justify-between"
       >
-        <span className={value ? 'text-white' : 'text-white/50'}>
+        <span className={value ? 'text-[var(--text)]' : 'text-[var(--text)]/50'}>
           {value ? pretty(value) : placeholder}
         </span>
-        <span className="text-white/50">📅</span>
+        <span className="text-[var(--text)]/50">📅</span>
       </button>
 
       {/* ✅ Render calendar into document.body so it never goes behind analytics UI */}

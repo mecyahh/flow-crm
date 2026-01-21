@@ -199,12 +199,12 @@ export default function PostDealPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -219,7 +219,7 @@ export default function PostDealPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Post a Deal</h1>
-            <p className="text-sm text-white/60 mt-1">
+            <p className="text-sm text-[var(--text)]/60 mt-1">
               Vertical drop-aligned form — phone + money formatting locked.
             </p>
           </div>
@@ -229,9 +229,9 @@ export default function PostDealPage() {
           </button>
         </div>
 
-        <div className="glass rounded-2xl border border-white/10 p-6">
+        <div className="glass rounded-2xl border border-[var(--border)] p-6">
           {loading ? (
-            <div className="px-6 py-10 text-center text-white/60">Loading…</div>
+            <div className="px-6 py-10 text-center text-[var(--text)]/60">Loading…</div>
           ) : (
             <div className="max-w-2xl">
               {/* ✅ Vertical drop-aligned layout */}
@@ -343,14 +343,14 @@ export default function PostDealPage() {
                 className={[
                   'mt-6 w-full rounded-2xl transition px-4 py-3 text-sm font-semibold',
                   saving
-                    ? 'bg-white/10 border border-white/10 text-white/60 cursor-not-allowed'
+                    ? 'bg-[var(--panel2)] border border-[var(--border)] text-[var(--text)]/60 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-500',
                 ].join(' ')}
               >
                 {saving ? 'Submitting…' : 'Submit Deal'}
               </button>
 
-              <div className="mt-3 text-[11px] text-white/50">
+              <div className="mt-3 text-[11px] text-[var(--text)]/50">
                 Phone auto-formats. Coverage/Premium auto-format. Product disabled until carrier selected.
               </div>
             </div>
@@ -364,7 +364,7 @@ export default function PostDealPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -410,7 +410,7 @@ function buildNote({ product_name, effective_date }: { product_name: string; eff
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel2)] transition rounded-2xl border border-[var(--border)]'

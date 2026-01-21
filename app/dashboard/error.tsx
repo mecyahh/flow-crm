@@ -11,14 +11,14 @@ export default function DashboardError({
   reset: () => void
 }) {
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center p-6">
-      <div className="rounded-2xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 max-w-xl w-full">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex items-center justify-center p-6">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel2)] backdrop-blur-xl p-6 max-w-xl w-full">
         <div className="text-xl font-semibold">Dashboard crashed</div>
-        <div className="mt-2 text-sm text-white/70">{error?.message || 'Unknown error'}</div>
+        <div className="mt-2 text-sm text-[var(--text)]/70">{error?.message || 'Unknown error'}</div>
         <div className="mt-5 flex gap-2">
           <button
             onClick={() => reset()}
-            className="rounded-xl border border-white/10 bg-white/10 hover:bg-white/20 transition px-4 py-2 text-sm font-semibold"
+            className="rounded-xl border border-[var(--border)] bg-[var(--panel2)] hover:bg-white/20 transition px-4 py-2 text-sm font-semibold"
           >
             Try again
           </button>

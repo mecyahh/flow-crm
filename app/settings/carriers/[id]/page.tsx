@@ -221,12 +221,12 @@ export default function CarrierDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -241,9 +241,9 @@ export default function CarrierDetailPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">
-              {carrier?.custom_name || 'Carrier'} <span className="text-white/50">· Comp Sheet</span>
+              {carrier?.custom_name || 'Carrier'} <span className="text-[var(--text)]/50">· Comp Sheet</span>
             </h1>
-            <p className="text-sm text-white/60 mt-1">
+            <p className="text-sm text-[var(--text)]/60 mt-1">
               Supported: {carrier?.supported_name || '—'} · Advance rate: {carrier?.advance_rate ?? 0.75}
             </p>
           </div>
@@ -261,15 +261,15 @@ export default function CarrierDetailPage() {
           </div>
         </div>
 
-        <div className="glass rounded-2xl border border-white/10 p-6">
+        <div className="glass rounded-2xl border border-[var(--border)] p-6">
           {loading ? (
-            <div className="py-10 text-center text-white/60">Loading…</div>
+            <div className="py-10 text-center text-[var(--text)]/60">Loading…</div>
           ) : !carrier ? (
-            <div className="py-10 text-center text-white/60">Carrier not found.</div>
+            <div className="py-10 text-center text-[var(--text)]/60">Carrier not found.</div>
           ) : (
             <>
               {products.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-6 text-[var(--text)]/70">
                   No products yet. Click <b>Add Product</b>.
                 </div>
               ) : (
@@ -277,16 +277,16 @@ export default function CarrierDetailPage() {
                   {products.map((p) => {
                     const levels = getLevelsForProduct(p.name)
                     return (
-                      <div key={p.id} className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-                        <div className="px-5 py-4 bg-white/5 flex items-center justify-between border-b border-white/10">
+                      <div key={p.id} className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
+                        <div className="px-5 py-4 bg-[var(--panel)] flex items-center justify-between border-b border-[var(--border)]">
                           <div className="text-sm font-semibold">{p.name || 'Product'}</div>
-                          <div className="text-xs text-white/55">Edit cells to save</div>
+                          <div className="text-xs text-[var(--text)]/55">Edit cells to save</div>
                         </div>
 
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
-                            <thead className="text-[11px] text-white/55">
-                              <tr className="border-b border-white/10">
+                            <thead className="text-[11px] text-[var(--text)]/55">
+                              <tr className="border-b border-[var(--border)]">
                                 <th className={thSticky}>Comp</th>
                                 {levels.map((lvl) => (
                                   <th key={lvl} className={thCenter}>
@@ -296,7 +296,7 @@ export default function CarrierDetailPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              <tr className="border-b border-white/10">
+                              <tr className="border-b border-[var(--border)]">
                                 <td className={tdSticky}>Rate</td>
                                 {levels.map((lvl) => {
                                   const key = `${p.id}:${lvl}`
@@ -317,7 +317,7 @@ export default function CarrierDetailPage() {
                           </table>
                         </div>
 
-                        <div className="px-5 py-4 text-[11px] text-white/55">
+                        <div className="px-5 py-4 text-[11px] text-[var(--text)]/55">
                           Tip: keep rates simple (example: <b>0.75</b>).
                         </div>
                       </div>
@@ -332,12 +332,12 @@ export default function CarrierDetailPage() {
 
       {/* ADD PRODUCT MODAL */}
       {createProductOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-3xl">
+        <div className="fixed inset-0 bg-[var(--bg)]/60 flex items-center justify-center z-50 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6 w-full max-w-3xl">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-lg font-semibold">Add Product</div>
-                <div className="text-xs text-white/55 mt-1">Creates a new comp table row set.</div>
+                <div className="text-xs text-[var(--text)]/55 mt-1">Creates a new comp table row set.</div>
               </div>
 
               <button onClick={() => setCreateProductOpen(false)} className={closeBtn}>
@@ -385,7 +385,7 @@ export default function CarrierDetailPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -398,21 +398,21 @@ function toNum(v: any) {
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 const btnGlass =
-  'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+  'glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel2)] transition rounded-2xl border border-[var(--border)]'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
 const closeBtn =
-  'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-3 text-sm font-semibold'
+  'rounded-2xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-4 py-3 text-sm font-semibold'
 const btnPink =
   'rounded-2xl bg-fuchsia-600 hover:bg-fuchsia-500 transition px-5 py-3 text-sm font-semibold'
 
 const thSticky =
-  'text-left px-5 py-3 whitespace-nowrap sticky left-0 bg-[#0b0f1a] z-10 border-r border-white/10'
+  'text-left px-5 py-3 whitespace-nowrap sticky left-0 bg-[var(--bg)] z-10 border-r border-[var(--border)]'
 const thCenter = 'text-center px-5 py-3 whitespace-nowrap'
 const tdSticky =
-  'px-5 py-4 font-semibold whitespace-nowrap sticky left-0 bg-[#0b0f1a] z-10 border-r border-white/10'
+  'px-5 py-4 font-semibold whitespace-nowrap sticky left-0 bg-[var(--bg)] z-10 border-r border-[var(--border)]'
 const tdCenter = 'px-5 py-4 text-center whitespace-nowrap'
 
 const cellInput =
-  'w-28 text-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-white/20 focus:bg-white/10'
+  'w-28 text-center rounded-xl border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm outline-none focus:border-white/20 focus:bg-[var(--panel2)]'

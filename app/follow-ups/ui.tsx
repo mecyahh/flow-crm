@@ -196,12 +196,12 @@ export default function FollowUpsClient() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -216,7 +216,7 @@ export default function FollowUpsClient() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Follow Ups</h1>
-            <p className="text-sm text-white/60 mt-1">Fast. Simple. No deals slipping.</p>
+            <p className="text-sm text-[var(--text)]/60 mt-1">Fast. Simple. No deals slipping.</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -238,7 +238,7 @@ export default function FollowUpsClient() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* FORM */}
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="text-sm font-semibold mb-4">Submit a Follow Up</div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -313,12 +313,12 @@ export default function FollowUpsClient() {
         setForm((f) => ({ ...f, follow_up_time: e.target.value }))
       }}
       className="
-        w-full rounded-2xl border border-white/10
-        bg-white/5 backdrop-blur-xl
+        w-full rounded-2xl border border-[var(--border)]
+        bg-[var(--panel)] backdrop-blur-xl
         px-4 py-3 text-sm outline-none
         hover:bg-white/7 transition
         focus:border-white/20 focus:bg-white/7
-        text-white
+        text-[var(--text)]
         [color-scheme:dark]
       "
     />
@@ -389,36 +389,36 @@ function Card({
   const dob = parsed.dob || ''
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-semibold">{r.full_name || '—'}</div>
-          <div className="text-xs text-white/60 mt-1">
+          <div className="text-xs text-[var(--text)]/60 mt-1">
             {r.phone || '—'} • {r.company || '—'}
           </div>
-          <div className="text-xs text-white/60 mt-1">
+          <div className="text-xs text-[var(--text)]/60 mt-1">
             {r.coverage != null ? `$${Number(r.coverage).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
             {' • '}
             {r.follow_up_at ? prettyDT(r.follow_up_at) : '—'}
           </div>
 
           {dob ? (
-            <div className="text-xs text-white/60 mt-1">
+            <div className="text-xs text-[var(--text)]/60 mt-1">
               DOB: {prettyDateOnly(dob)}
             </div>
           ) : null}
 
-          {parsed.notes ? <div className="text-xs text-white/70 mt-2">{parsed.notes}</div> : null}
+          {parsed.notes ? <div className="text-xs text-[var(--text)]/70 mt-2">{parsed.notes}</div> : null}
         </div>
 
-        <div className="text-[11px] px-2 py-1 rounded-xl border border-white/10 bg-white/5 text-white/70">
+        <div className="text-[11px] px-2 py-1 rounded-xl border border-[var(--border)] bg-[var(--panel)] text-[var(--text)]/70">
           {due ? 'DUE' : 'UPCOMING'}
         </div>
       </div>
 
       {due && (
         <div className="mt-3">
-          <div className="text-xs text-white/55 mb-2">Due Now</div>
+          <div className="text-xs text-[var(--text)]/55 mb-2">Due Now</div>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => onStatus(r.id, 'completed')} className={btnGreen}>
               Closed Deal
@@ -438,10 +438,10 @@ function Card({
 
 function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
   return (
-    <div className="glass rounded-2xl border border-white/10 overflow-hidden">
-      <div className="px-5 py-4 bg-white/5 flex items-center justify-between">
+    <div className="glass rounded-2xl border border-[var(--border)] overflow-hidden">
+      <div className="px-5 py-4 bg-[var(--panel)] flex items-center justify-between">
         <div className="text-sm font-semibold">{title}</div>
-        <div className="text-xs text-white/60">{count}</div>
+        <div className="text-xs text-[var(--text)]/60">{count}</div>
       </div>
       <div className="p-5 space-y-3">{children}</div>
     </div>
@@ -449,13 +449,13 @@ function Section({ title, count, children }: { title: string; count: number; chi
 }
 
 function Empty({ text }: { text: string }) {
-  return <div className="text-sm text-white/60">{text}</div>
+  return <div className="text-sm text-[var(--text)]/60">{text}</div>
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="text-xs text-white/55">{label}</div>
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
+      <div className="text-xs text-[var(--text)]/55">{label}</div>
       <div className="text-2xl font-semibold mt-1">{value}</div>
     </div>
   )
@@ -464,7 +464,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -550,10 +550,10 @@ function parseISODate(iso: string) {
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
-const btnGlass = 'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnGlass = 'rounded-2xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-4 py-2 text-sm font-semibold'
 const btnGreen = 'rounded-2xl bg-green-600 hover:bg-green-500 transition px-4 py-2 text-sm font-semibold'
 const btnYellow = 'rounded-2xl bg-yellow-500 hover:bg-yellow-400 transition px-4 py-2 text-sm font-semibold text-black'
 const btnRed = 'rounded-2xl bg-red-600 hover:bg-red-500 transition px-4 py-2 text-sm font-semibold'

@@ -102,7 +102,7 @@ export default function FlowLineChart({
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-xs text-white/60">Trend</div>
+        <div className="text-xs text-[var(--text)]/60">Trend</div>
         <div
           className={`text-xs font-semibold ${
             trend.dir === 'up'

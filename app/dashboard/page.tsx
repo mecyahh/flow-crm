@@ -216,18 +216,18 @@ export default function DashboardPage() {
   const monthlyGoal = 90
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       <div className="ml-64">
         <header className="px-10 pt-10 pb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-            <p className="text-sm text-white/60 mt-1">Welcome Back {welcomeName}</p>
+            <p className="text-sm text-[var(--text)]/60 mt-1">Welcome Back {welcomeName}</p>
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition">
+            <button className="glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel2)] transition">
               Notifications
             </button>
             <a
@@ -251,10 +251,10 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 glass p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold">Flow Trend</h2>
-                <span className="text-xs text-white/60">Last 7 days</span>
+                <span className="text-xs text-[var(--text)]/60">Last 7 days</span>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
                 <FlowLineChart labels={lineLabels} values={lineValues} />
               </div>
 
@@ -279,12 +279,12 @@ export default function DashboardPage() {
             <div className="glass p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold">Leaderboard</h2>
-                <Link href="/leaderboard" className="text-xs text-white/60 hover:text-white transition">
+                <Link href="/leaderboard" className="text-xs text-[var(--text)]/60 hover:text-[var(--text)] transition">
                   All results →
                 </Link>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-5">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 mb-5">
                 <CarrierDonut labels={carrierDist.labels} values={carrierDist.values} />
               </div>
 
@@ -301,7 +301,7 @@ export default function DashboardPage() {
                 {!loading && leaders.length === 0 && <Leader rank={1} name="—" amount="—" />}
               </div>
 
-              <div className="mt-4 text-xs text-white/50">Agency leaderboard (global).</div>
+              <div className="mt-4 text-xs text-[var(--text)]/50">Agency leaderboard (global).</div>
             </div>
           </section>
 
@@ -309,10 +309,10 @@ export default function DashboardPage() {
           <section className="mt-6 glass p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Recent Activity</h2>
-              <span className="text-xs text-white/60">Latest submissions</span>
+              <span className="text-xs text-[var(--text)]/60">Latest submissions</span>
             </div>
 
-            <div className="rounded-2xl border border-white/10 overflow-hidden">
+            <div className="rounded-2xl border border-[var(--border)] overflow-hidden">
               <Row head left="Agent" mid="Premium" right="By the hour" />
               {(loading ? [] : parsed.slice(0, 6)).map((d) => (
                 <Row key={d.id} left={welcomeName} mid={`$${formatMoney(d.premiumNum)}`} right={timeAgo(d.dt)} />
@@ -332,11 +332,11 @@ function sumPremium(rows: any[]) {
 
 function KPI({ title, value, sub }: { title: string; value: string; sub: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <p className="text-xs text-white/60">{title}</p>
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
+      <p className="text-xs text-[var(--text)]/60">{title}</p>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-3xl font-semibold">{value}</span>
-        <span className="text-xs text-white/50">{sub}</span>
+        <span className="text-xs text-[var(--text)]/50">{sub}</span>
       </div>
     </div>
   )
@@ -345,7 +345,7 @@ function KPI({ title, value, sub }: { title: string; value: string; sub: string 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="glass p-6">
-      <p className="text-sm text-white/60">{label}</p>
+      <p className="text-sm text-[var(--text)]/60">{label}</p>
       <p className="text-2xl font-semibold mt-1">{value}</p>
     </div>
   )
@@ -364,21 +364,21 @@ function Leader({
 }) {
   return (
     <div
-      className={`flex items-center justify-between rounded-2xl border border-white/10 px-4 py-3 ${
-        highlight ? 'bg-white/10' : 'bg-white/5'
+      className={`flex items-center justify-between rounded-2xl border border-[var(--border)] px-4 py-3 ${
+        highlight ? 'bg-[var(--panel2)]' : 'bg-[var(--panel)]'
       }`}
     >
       <div className="flex items-center gap-3">
         <div
           className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${
-            highlight ? 'bg-blue-600' : 'bg-white/10'
+            highlight ? 'bg-blue-600' : 'bg-[var(--panel2)]'
           }`}
         >
           {rank}
         </div>
         <div>
           <div className={`${highlight ? 'text-base font-semibold' : 'text-sm font-medium'}`}>{name}</div>
-          <div className="text-xs text-white/50">Monthly production</div>
+          <div className="text-xs text-[var(--text)]/50">Monthly production</div>
         </div>
       </div>
 
@@ -392,8 +392,8 @@ function Leader({
 function Row({ head, left, mid, right }: { head?: boolean; left: string; mid: string; right: string }) {
   return (
     <div
-      className={`grid grid-cols-3 px-4 py-3 border-b border-white/10 ${
-        head ? 'text-xs text-white/60 bg-white/5' : 'text-sm'
+      className={`grid grid-cols-3 px-4 py-3 border-b border-[var(--border)] ${
+        head ? 'text-xs text-[var(--text)]/60 bg-[var(--panel)]' : 'text-sm'
       }`}
     >
       <div>{left}</div>

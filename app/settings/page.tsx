@@ -467,12 +467,12 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -485,12 +485,12 @@ export default function SettingsPage() {
 
       {/* EDIT MODAL */}
       {editOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-xl glass rounded-2xl border border-white/10 p-6">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--bg)]/60 px-4">
+          <div className="w-full max-w-xl glass rounded-2xl border border-[var(--border)] p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <div className="text-sm font-semibold">Edit Agent</div>
-                <div className="text-xs text-white/55 mt-1">
+                <div className="text-xs text-[var(--text)]/55 mt-1">
                   {editTarget?.email || '—'}
                 </div>
               </div>
@@ -577,10 +577,10 @@ export default function SettingsPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-            <p className="text-sm text-white/60 mt-1">
+            <p className="text-sm text-[var(--text)]/60 mt-1">
               Profile{canManageAgents ? ' + Agents + Positions' : ''}{isAdmin ? ' + Carriers' : ''}
             </p>
-            {booting && <div className="text-xs text-white/45 mt-2">Loading settings…</div>}
+            {booting && <div className="text-xs text-[var(--text)]/45 mt-2">Loading settings…</div>}
           </div>
 
           <div className="flex gap-2">
@@ -609,11 +609,11 @@ export default function SettingsPage() {
 
         {/* PROFILE */}
         {tab === 'profile' && (
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="flex items-center justify-between gap-4 mb-6">
               <div>
                 <div className="text-sm font-semibold">My Profile</div>
-                <div className="text-xs text-white/55 mt-1">Update your profile details + avatar.</div>
+                <div className="text-xs text-[var(--text)]/55 mt-1">Update your profile details + avatar.</div>
               </div>
               <button onClick={logout} className={dangerBtn}>
                 Log out
@@ -634,13 +634,13 @@ export default function SettingsPage() {
               </Field>
 
               <Field label="Profile Picture (Upload)">
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
                   <input
                     type="file"
                     accept="image/*"
-                    className="block w-full text-sm text-white/70
+                    className="block w-full text-sm text-[var(--text)]/70
                       file:mr-4 file:rounded-xl file:border-0
-                      file:bg-white/10 file:px-4 file:py-2
+                      file:bg-[var(--panel2)] file:px-4 file:py-2
                       file:text-sm file:font-semibold
                       hover:file:bg-white/20 transition"
                     onChange={(e) => {
@@ -654,10 +654,10 @@ export default function SettingsPage() {
             </div>
 
             {avatarPreview && (
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 flex items-center gap-4">
-                <div className="text-xs text-white/60">Preview</div>
+              <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 flex items-center gap-4">
+                <div className="text-xs text-[var(--text)]/60">Preview</div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={avatarPreview} alt="avatar" className="h-12 w-12 rounded-2xl border border-white/10 object-cover" />
+                <img src={avatarPreview} alt="avatar" className="h-12 w-12 rounded-2xl border border-[var(--border)] object-cover" />
               </div>
             )}
 
@@ -669,11 +669,11 @@ export default function SettingsPage() {
 
         {/* AGENTS */}
         {tab === 'agents' && canManageAgents && (
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Agents</div>
-                <div className="text-xs text-white/55 mt-1">Invite users + view roster.</div>
+                <div className="text-xs text-[var(--text)]/55 mt-1">Invite users + view roster.</div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -695,17 +695,17 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2 mb-4">
+            <div className="glass rounded-2xl border border-[var(--border)] px-3 py-2 flex items-center gap-2 mb-4">
               <input
-                className="bg-transparent outline-none text-sm w-full placeholder:text-white/40"
+                className="bg-transparent outline-none text-sm w-full placeholder:text-[var(--text)]/40"
                 placeholder="Search agents…"
                 value={agentSearch}
                 onChange={(e) => setAgentSearch(e.target.value)}
               />
             </div>
 
-            <div className="rounded-2xl border border-white/10 overflow-hidden">
-              <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
+            <div className="rounded-2xl border border-[var(--border)] overflow-hidden">
+              <div className="grid grid-cols-12 px-4 py-3 border-b border-[var(--border)] text-[11px] text-[var(--text)]/60 bg-[var(--panel)]">
                 <div className="col-span-3">Agent</div>
                 <div className="col-span-4">Email</div>
                 <div className="col-span-2 text-center">Role</div>
@@ -713,36 +713,36 @@ export default function SettingsPage() {
                 <div className="col-span-1 text-right">Actions</div>
               </div>
 
-              {loadingAgents && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
+              {loadingAgents && <div className="px-4 py-6 text-sm text-[var(--text)]/60">Loading…</div>}
 
               {!loadingAgents &&
                 filteredAgents.map((a) => {
                   const name = `${a.first_name || '—'} ${a.last_name || ''}`.trim()
                   return (
-                    <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
+                    <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-[var(--border)] text-sm items-center">
                       <div className="col-span-3 font-semibold">
                         {name}
                         {a.is_agency_owner ? (
-                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
+                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-[var(--panel)] border-[var(--border)] text-[var(--text)]/70">
                             Owner
                           </span>
                         ) : null}
                         {a.role === 'admin' ? (
-                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-white/5 border-white/10 text-white/70">
+                          <span className="ml-2 text-[10px] px-2 py-1 rounded-xl border bg-[var(--panel)] border-[var(--border)] text-[var(--text)]/70">
                             Admin
                           </span>
                         ) : null}
                       </div>
 
-                      <div className="col-span-4 text-white/75">{a.email || '—'}</div>
-                      <div className="col-span-2 text-center text-white/70">{a.role || 'agent'}</div>
-                      <div className="col-span-2 text-right text-white/80">{typeof a.comp === 'number' ? `${a.comp}%` : '—'}</div>
+                      <div className="col-span-4 text-[var(--text)]/75">{a.email || '—'}</div>
+                      <div className="col-span-2 text-center text-[var(--text)]/70">{a.role || 'agent'}</div>
+                      <div className="col-span-2 text-right text-[var(--text)]/80">{typeof a.comp === 'number' ? `${a.comp}%` : '—'}</div>
 
                       <div className="col-span-1 flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => openEdit(a)}
-                          className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-2 py-2"
+                          className="rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-2 py-2"
                           title="Edit"
                         >
                           ✏️
@@ -768,7 +768,7 @@ export default function SettingsPage() {
                               setToast(errMsg(e))
                             }
                           }}
-                          className="rounded-xl border border-white/10 bg-white/5 hover:bg-red-600/30 transition px-2 py-2"
+                          className="rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-red-600/30 transition px-2 py-2"
                           title="Delete"
                         >
                           🗑
@@ -778,17 +778,17 @@ export default function SettingsPage() {
                   )
                 })}
 
-              {!loadingAgents && filteredAgents.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No agents.</div>}
+              {!loadingAgents && filteredAgents.length === 0 && <div className="px-4 py-6 text-sm text-[var(--text)]/60">No agents.</div>}
             </div>
 
             {/* INVITE MODAL */}
             {inviteOpen && (
-              <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 px-4">
-                <div className="w-full max-w-xl glass rounded-2xl border border-white/10 p-6">
+              <div className="fixed inset-0 z-[150] flex items-center justify-center bg-[var(--bg)]/60 px-4">
+                <div className="w-full max-w-xl glass rounded-2xl border border-[var(--border)] p-6">
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div>
                       <div className="text-sm font-semibold">Invite Agent</div>
-                      <div className="text-xs text-white/55 mt-1">Creates user + sends invite link.</div>
+                      <div className="text-xs text-[var(--text)]/55 mt-1">Creates user + sends invite link.</div>
                     </div>
                     <button onClick={() => setInviteOpen(false)} className={btnGlass}>
                       Close
@@ -901,9 +901,9 @@ export default function SettingsPage() {
 
         {/* POSITIONS */}
         {tab === 'positions' && canManageAgents && (
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="text-sm font-semibold">Positions</div>
-            <div className="text-xs text-white/55 mt-1">Update upline + comp. (Effective date optional.)</div>
+            <div className="text-xs text-[var(--text)]/55 mt-1">Update upline + comp. (Effective date optional.)</div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
               <Field label="Select User">
@@ -955,11 +955,11 @@ export default function SettingsPage() {
 
         {/* CARRIERS */}
         {tab === 'carriers' && isAdmin && (
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-sm font-semibold">Carriers</div>
-                <div className="text-xs text-white/55 mt-1">Create and maintain carrier records. (Sort order required.)</div>
+                <div className="text-xs text-[var(--text)]/55 mt-1">Create and maintain carrier records. (Sort order required.)</div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -981,20 +981,20 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2 mb-4">
+            <div className="glass rounded-2xl border border-[var(--border)] px-3 py-2 flex items-center gap-2 mb-4">
               <input
-                className="bg-transparent outline-none text-sm w-full placeholder:text-white/40"
+                className="bg-transparent outline-none text-sm w-full placeholder:text-[var(--text)]/40"
                 placeholder="Search carriers…"
                 value={carrierSearch}
                 onChange={(e) => setCarrierSearch(e.target.value)}
               />
             </div>
 
-            {loadingCarriers && <div className="text-sm text-white/60">Loading…</div>}
+            {loadingCarriers && <div className="text-sm text-[var(--text)]/60">Loading…</div>}
 
             {!loadingCarriers && (
-              <div className="rounded-2xl border border-white/10 overflow-hidden">
-                <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
+              <div className="rounded-2xl border border-[var(--border)] overflow-hidden">
+                <div className="grid grid-cols-12 px-4 py-3 border-b border-[var(--border)] text-[11px] text-[var(--text)]/60 bg-[var(--panel)]">
                   <div className="col-span-3">Carrier</div>
                   <div className="col-span-2">Supported</div>
                   <div className="col-span-2 text-right">Advance</div>
@@ -1003,14 +1003,14 @@ export default function SettingsPage() {
                 </div>
 
                 {filteredCarriers.map((c) => (
-                  <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
+                  <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-[var(--border)] text-sm items-center">
                     <div className="col-span-3 font-semibold">{c.name}</div>
-                    <div className="col-span-2 text-white/70">{c.supported_name || '—'}</div>
-                    <div className="col-span-2 text-right text-white/80">{Number(c.advance_rate || 0).toFixed(2)}</div>
-                    <div className="col-span-2 text-right text-white/70">{c.sort_order}</div>
-                    <div className="col-span-3 text-right text-xs text-white/70">
+                    <div className="col-span-2 text-[var(--text)]/70">{c.supported_name || '—'}</div>
+                    <div className="col-span-2 text-right text-[var(--text)]/80">{Number(c.advance_rate || 0).toFixed(2)}</div>
+                    <div className="col-span-2 text-right text-[var(--text)]/70">{c.sort_order}</div>
+                    <div className="col-span-3 text-right text-xs text-[var(--text)]/70">
                       {c.eapp_url ? (
-                        <a className="hover:text-white underline" href={c.eapp_url} target="_blank" rel="noreferrer">
+                        <a className="hover:text-[var(--text)] underline" href={c.eapp_url} target="_blank" rel="noreferrer">
                           Eapp
                         </a>
                       ) : (
@@ -1020,7 +1020,7 @@ export default function SettingsPage() {
                         <>
                           {' '}
                           •{' '}
-                          <a className="hover:text-white underline" href={c.portal_url} target="_blank" rel="noreferrer">
+                          <a className="hover:text-[var(--text)] underline" href={c.portal_url} target="_blank" rel="noreferrer">
                             Portal
                           </a>
                         </>
@@ -1029,18 +1029,18 @@ export default function SettingsPage() {
                   </div>
                 ))}
 
-                {filteredCarriers.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No carriers.</div>}
+                {filteredCarriers.length === 0 && <div className="px-4 py-6 text-sm text-[var(--text)]/60">No carriers.</div>}
               </div>
             )}
 
             {/* CREATE CARRIER MODAL */}
             {createOpen && (
-              <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/60 px-4">
-                <div className="w-full max-w-2xl glass rounded-2xl border border-white/10 p-6">
+              <div className="fixed inset-0 z-[160] flex items-center justify-center bg-[var(--bg)]/60 px-4">
+                <div className="w-full max-w-2xl glass rounded-2xl border border-[var(--border)] p-6">
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div>
                       <div className="text-sm font-semibold">Add Carrier</div>
-                      <div className="text-xs text-white/55 mt-1">Sort order is required (DB constraint).</div>
+                      <div className="text-xs text-[var(--text)]/55 mt-1">Sort order is required (DB constraint).</div>
                     </div>
                     <button onClick={() => setCreateOpen(false)} className={btnGlass}>
                       Close
@@ -1082,7 +1082,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="mt-4 flex items-center gap-2">
-                    <label className="flex items-center gap-2 text-sm text-white/70">
+                    <label className="flex items-center gap-2 text-sm text-[var(--text)]/70">
                       <input
                         type="checkbox"
                         checked={newCarrier.active}
@@ -1114,7 +1114,7 @@ export default function SettingsPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -1126,7 +1126,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
       onClick={onClick}
       className={[
         'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
-        active ? 'border-white/20 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10',
+        active ? 'border-white/20 bg-[var(--panel2)]' : 'border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)]',
       ].join(' ')}
     >
       {children}
@@ -1135,12 +1135,12 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
 const btnGlass =
-  'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold'
+  'rounded-2xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-4 py-2 text-sm font-semibold'
 
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
 
 const saveBtn =
   'rounded-2xl bg-blue-600 hover:bg-blue-500 transition px-4 py-2 text-sm font-semibold'

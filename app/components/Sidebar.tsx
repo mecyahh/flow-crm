@@ -18,10 +18,10 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 p-6 bg-[#070a12] border-r border-white/10">
+    <aside className="fixed left-0 top-0 h-screen w-64 p-6 bg-[#070a12] border-r border-[var(--border)]">
       <div className="mb-8">
         <div className="text-xl font-semibold tracking-tight">Flow</div>
-        <div className="text-xs text-white/50 mt-1">Deal tracking</div>
+        <div className="text-xs text-[var(--text)]/50 mt-1">Deal tracking</div>
       </div>
 
       <nav className="flex flex-col gap-2">
@@ -34,8 +34,8 @@ export default function Sidebar() {
               className={[
                 'rounded-xl px-4 py-3 text-sm transition border flex items-center justify-between',
                 active
-                  ? 'bg-white/10 border-white/15'
-                  : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10',
+                  ? 'bg-[var(--panel2)] border-white/15'
+                  : 'bg-transparent border-transparent hover:bg-[var(--panel)] hover:border-[var(--border)]',
               ].join(' ')}
             >
               <span>{item.label}</span>
@@ -53,7 +53,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="absolute bottom-6 left-6 right-6 text-xs text-white/40">v1</div>
+      <div className="absolute bottom-6 left-6 right-6 text-xs text-[var(--text)]/40">v1</div>
     </aside>
   )
 }

@@ -269,12 +269,12 @@ export default function DealHousePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -289,7 +289,7 @@ export default function DealHousePage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Deal House</h1>
-            <p className="text-sm text-white/60 mt-1">
+            <p className="text-sm text-[var(--text)]/60 mt-1">
               {tab === 'team' ? 'Team view (you + downlines)' : 'Personal view (your deals only)'}
             </p>
           </div>
@@ -303,7 +303,7 @@ export default function DealHousePage() {
                   'rounded-2xl px-4 py-2 text-sm font-semibold border transition',
                   tab === 'personal'
                     ? 'bg-yellow-500/20 border-yellow-400/35 text-yellow-100'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10 text-white/80',
+                    : 'bg-[var(--panel)] border-[var(--border)] hover:bg-[var(--panel2)] text-[var(--text)]/80',
                 ].join(' ')}
               >
                 Personal
@@ -316,8 +316,8 @@ export default function DealHousePage() {
                   'rounded-2xl px-4 py-2 text-sm font-semibold border transition',
                   tab === 'team'
                     ? 'bg-fuchsia-500/20 border-fuchsia-400/35 text-fuchsia-100'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10 text-white/80',
-                  !canSeeTeam ? 'opacity-40 cursor-not-allowed hover:bg-white/5' : '',
+                    : 'bg-[var(--panel)] border-[var(--border)] hover:bg-[var(--panel2)] text-[var(--text)]/80',
+                  !canSeeTeam ? 'opacity-40 cursor-not-allowed hover:bg-[var(--panel)]' : '',
                 ].join(' ')}
                 title={!canSeeTeam ? 'No downlines assigned yet' : 'Team'}
               >
@@ -325,7 +325,7 @@ export default function DealHousePage() {
               </button>
             </div>
 
-            <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2">
+            <div className="glass rounded-2xl border border-[var(--border)] px-3 py-2 flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path
                   d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm6.5 1 4-4"
@@ -335,7 +335,7 @@ export default function DealHousePage() {
                 />
               </svg>
               <input
-                className="bg-transparent outline-none text-sm w-72 placeholder:text-white/40"
+                className="bg-transparent outline-none text-sm w-72 placeholder:text-[var(--text)]/40"
                 placeholder="Search…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -348,23 +348,23 @@ export default function DealHousePage() {
           </div>
         </div>
 
-        <div className="glass rounded-2xl border border-white/10 overflow-hidden">
-          <div className="px-6 py-4 bg-white/5 flex items-center justify-between">
+        <div className="glass rounded-2xl border border-[var(--border)] overflow-hidden">
+          <div className="px-6 py-4 bg-[var(--panel)] flex items-center justify-between">
             <div className="text-sm font-semibold">All Deals</div>
-            <div className="text-xs text-white/60">{loading ? 'Loading…' : `${filtered.length.toLocaleString()} records`}</div>
+            <div className="text-xs text-[var(--text)]/60">{loading ? 'Loading…' : `${filtered.length.toLocaleString()} records`}</div>
           </div>
 
-          {loading && <div className="px-6 py-10 text-center text-white/60">Loading…</div>}
+          {loading && <div className="px-6 py-10 text-center text-[var(--text)]/60">Loading…</div>}
 
           {!loading && filtered.length === 0 && (
-            <div className="px-6 py-10 text-center text-white/60">No deals yet.</div>
+            <div className="px-6 py-10 text-center text-[var(--text)]/60">No deals yet.</div>
           )}
 
           {!loading && filtered.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-[11px] text-white/55">
-                  <tr className="border-b border-white/10">
+                <thead className="text-[11px] text-[var(--text)]/55">
+                  <tr className="border-b border-[var(--border)]">
                     {tab === 'team' && <th className={th}>Agent</th>}
                     <th className={th}>Name</th>
                     <th className={th}>Phone</th>
@@ -380,7 +380,7 @@ export default function DealHousePage() {
 
                 <tbody>
                   {filtered.map((d) => (
-                    <tr key={d.id} className="border-b border-white/10 hover:bg-white/5 transition">
+                    <tr key={d.id} className="border-b border-[var(--border)] hover:bg-[var(--panel)] transition">
                       {tab === 'team' && <td className={td}>{agentName(d.agent_id, profiles)}</td>}
                       <td className={tdStrong}>{d.full_name || '—'}</td>
                       <td className={td}>{d.phone || '—'}</td>
@@ -421,12 +421,12 @@ export default function DealHousePage() {
 
       {/* EDIT MODAL */}
       {editing && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-3xl">
+        <div className="fixed inset-0 bg-[var(--bg)]/60 flex items-center justify-center z-50 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6 w-full max-w-3xl">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-lg font-semibold">Edit Deal</div>
-                <div className="text-xs text-white/55 mt-1">Updates save instantly to Deal House.</div>
+                <div className="text-xs text-[var(--text)]/55 mt-1">Updates save instantly to Deal House.</div>
               </div>
 
               <button
@@ -484,14 +484,14 @@ export default function DealHousePage() {
             <div className="mt-5">
               <button
                 onClick={() => setShowNotes((s) => !s)}
-                className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-3 text-sm font-semibold w-full flex items-center justify-between"
+                className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-4 py-3 text-sm font-semibold w-full flex items-center justify-between"
               >
                 <span>Notes</span>
-                <span className="text-white/60">{showNotes ? 'Hide' : 'Show'}</span>
+                <span className="text-[var(--text)]/60">{showNotes ? 'Hide' : 'Show'}</span>
               </button>
 
               {showNotes && (
-                <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
                   <textarea
                     className={`${inputCls} min-h-[110px]`}
                     value={(editing.note || editing.notes || '')}
@@ -523,12 +523,12 @@ export default function DealHousePage() {
 
       {/* FOLDER MODAL */}
       {folderDeal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-3xl">
+        <div className="fixed inset-0 bg-[var(--bg)]/60 flex items-center justify-center z-50 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6 w-full max-w-3xl">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-lg font-semibold">Folder</div>
-                <div className="text-xs text-white/55 mt-1">Extra fields (address, banking, notes).</div>
+                <div className="text-xs text-[var(--text)]/55 mt-1">Extra fields (address, banking, notes).</div>
               </div>
 
               <button onClick={() => setFolderDeal(null)} className={closeBtn}>
@@ -585,7 +585,7 @@ export default function DealHousePage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -627,26 +627,26 @@ function statusPill(status: string | null) {
   if (s === 'active') return 'text-[11px] px-2 py-1 rounded-xl border bg-green-500/12 border-green-400/25 text-green-200'
   if (s === 'chargeback') return 'text-[11px] px-2 py-1 rounded-xl border bg-red-500/12 border-red-400/25 text-red-200'
   if (s === 'pending') return 'text-[11px] px-2 py-1 rounded-xl border bg-yellow-500/12 border-yellow-400/25 text-yellow-200'
-  return 'text-[11px] px-2 py-1 rounded-xl border bg-white/6 border-white/12 text-white/70'
+  return 'text-[11px] px-2 py-1 rounded-xl border bg-white/6 border-white/12 text-[var(--text)]/70'
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 const btnGlass =
-  'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+  'glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel2)] transition rounded-2xl border border-[var(--border)]'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
 
 const th = 'text-left px-6 py-3 whitespace-nowrap'
 const thRight = 'text-right px-6 py-3 whitespace-nowrap'
-const td = 'px-6 py-4 text-white/80 whitespace-nowrap'
+const td = 'px-6 py-4 text-[var(--text)]/80 whitespace-nowrap'
 const tdStrong = 'px-6 py-4 font-semibold whitespace-nowrap'
 const tdRight = 'px-6 py-4 text-right whitespace-nowrap'
 
 const iconBtn =
-  'rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs'
+  'rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-3 py-2 text-xs'
 
 const closeBtn =
-  'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-3 text-sm font-semibold'
+  'rounded-2xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-4 py-3 text-sm font-semibold'
 
 const saveBtn =
   'rounded-2xl bg-green-600 hover:bg-green-500 transition px-5 py-3 text-sm font-semibold'

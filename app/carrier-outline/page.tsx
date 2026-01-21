@@ -294,12 +294,12 @@ export default function CarrierOutlinePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -314,11 +314,11 @@ export default function CarrierOutlinePage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Carrier Outline</h1>
-            <p className="text-sm text-white/60 mt-1">Producer numbers + logins + quick links.</p>
+            <p className="text-sm text-[var(--text)]/60 mt-1">Producer numbers + logins + quick links.</p>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2">
+            <div className="glass rounded-2xl border border-[var(--border)] px-3 py-2 flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path
                   d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm6.5 1 4-4"
@@ -328,7 +328,7 @@ export default function CarrierOutlinePage() {
                 />
               </svg>
               <input
-                className="bg-transparent outline-none text-sm w-56 placeholder:text-white/40"
+                className="bg-transparent outline-none text-sm w-56 placeholder:text-[var(--text)]/40"
                 placeholder="Search carriers…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -346,7 +346,7 @@ export default function CarrierOutlinePage() {
         </div>
 
         {/* LICENSES TOP */}
-        <div className="glass rounded-2xl border border-white/10 p-6 mb-6">
+        <div className="glass rounded-2xl border border-[var(--border)] p-6 mb-6">
           <div className="text-sm font-semibold mb-4">Licenses</div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -380,7 +380,7 @@ export default function CarrierOutlinePage() {
           </button>
         </div>
 
-        {loading && <div className="text-white/60">Loading…</div>}
+        {loading && <div className="text-[var(--text)]/60">Loading…</div>}
 
         {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -396,15 +396,15 @@ export default function CarrierOutlinePage() {
               const phone = (c.support_phone || fb?.support_phone || null) as string | null
 
               return (
-                <div key={c.id} className="glass rounded-2xl border border-white/10 p-6">
+                <div key={c.id} className="glass rounded-2xl border border-[var(--border)] p-6">
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-3">
                         <div className="text-lg font-semibold truncate">{c.name}</div>
                         <StatusPill status={d?.status || 'active'} />
-                        {has && <span className="text-xs text-white/50">Saved</span>}
+                        {has && <span className="text-xs text-[var(--text)]/50">Saved</span>}
                       </div>
-                      <div className="text-xs text-white/55 mt-1">
+                      <div className="text-xs text-[var(--text)]/55 mt-1">
                         Last updated: {has ? new Date(accounts[c.id].updated_at).toLocaleString() : '—'}
                       </div>
                     </div>
@@ -457,12 +457,12 @@ export default function CarrierOutlinePage() {
                   </div>
 
                   {/* E-App | Agent Portal, Phone below */}
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <LinkCard label="E-App" href={eapp} />
                       <LinkCard label="Agent Portal" href={portal} />
                     </div>
-                    <div className="mt-3 text-center text-sm text-white/80">{phone ? phone : '—'}</div>
+                    <div className="mt-3 text-center text-sm text-[var(--text)]/80">{phone ? phone : '—'}</div>
                   </div>
 
                   <button
@@ -485,7 +485,7 @@ export default function CarrierOutlinePage() {
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={className || ''}>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -497,7 +497,7 @@ function StatusPill({ status }: { status: string }) {
       ? 'bg-green-500/12 border-green-400/25 text-green-200'
       : status === 'pending'
       ? 'bg-yellow-500/12 border-yellow-400/25 text-yellow-200'
-      : 'bg-white/6 border-white/12 text-white/70'
+      : 'bg-white/6 border-white/12 text-[var(--text)]/70'
   return <span className={`text-[11px] px-2 py-1 rounded-xl border ${cls}`}>{status}</span>
 }
 
@@ -511,8 +511,8 @@ function LinkCard({ label, href }: { label: string; href: string | null }) {
       className={[
         'rounded-2xl border px-4 py-3 text-sm font-semibold transition flex items-center justify-between',
         disabled
-          ? 'border-white/10 bg-white/5 text-white/40 pointer-events-none'
-          : 'border-white/10 bg-white/5 hover:bg-white/10 text-white/90',
+          ? 'border-[var(--border)] bg-[var(--panel)] text-[var(--text)]/40 pointer-events-none'
+          : 'border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] text-[var(--text)]/90',
       ].join(' ')}
     >
       <span>{label}</span>
@@ -522,7 +522,7 @@ function LinkCard({ label, href }: { label: string; href: string | null }) {
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel2)] transition rounded-2xl border border-[var(--border)]'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
 const btnDanger = 'rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs hover:bg-red-500/15 transition'

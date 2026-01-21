@@ -147,12 +147,12 @@ export default function CarriersSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -167,7 +167,7 @@ export default function CarriersSettingsPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Carriers</h1>
-            <p className="text-sm text-white/60 mt-1">Admin-only carrier directory + configuration.</p>
+            <p className="text-sm text-[var(--text)]/60 mt-1">Admin-only carrier directory + configuration.</p>
           </div>
 
           <div className="flex gap-2">
@@ -180,17 +180,17 @@ export default function CarriersSettingsPage() {
           </div>
         </div>
 
-        <div className="glass rounded-2xl border border-white/10 px-3 py-2 flex items-center gap-2 mb-4">
+        <div className="glass rounded-2xl border border-[var(--border)] px-3 py-2 flex items-center gap-2 mb-4">
           <input
-            className="bg-transparent outline-none text-sm w-full placeholder:text-white/40"
+            className="bg-transparent outline-none text-sm w-full placeholder:text-[var(--text)]/40"
             placeholder="Search carriers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
 
-        <div className="rounded-2xl border border-white/10 overflow-hidden">
-          <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-white/60 bg-white/5">
+        <div className="rounded-2xl border border-[var(--border)] overflow-hidden">
+          <div className="grid grid-cols-12 px-4 py-3 border-b border-[var(--border)] text-[11px] text-[var(--text)]/60 bg-[var(--panel)]">
             <div className="col-span-4">Carrier</div>
             <div className="col-span-3">Supported Name</div>
             <div className="col-span-2 text-center">Advance Rate</div>
@@ -198,20 +198,20 @@ export default function CarriersSettingsPage() {
             <div className="col-span-2 text-right">Open</div>
           </div>
 
-          {loading && <div className="px-4 py-6 text-sm text-white/60">Loading…</div>}
+          {loading && <div className="px-4 py-6 text-sm text-[var(--text)]/60">Loading…</div>}
 
           {!loading &&
             filtered.map((c) => (
-              <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center">
+              <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-[var(--border)] text-sm items-center">
                 <div className="col-span-4 font-semibold">{c.name}</div>
-                <div className="col-span-3 text-white/75">{c.supported_name || '—'}</div>
-                <div className="col-span-2 text-center text-white/80">
+                <div className="col-span-3 text-[var(--text)]/75">{c.supported_name || '—'}</div>
+                <div className="col-span-2 text-center text-[var(--text)]/80">
                   {typeof c.advance_rate === 'number' ? c.advance_rate.toFixed(2) : '—'}
                 </div>
                 <div className="col-span-1 text-center">{c.active ? '✅' : '—'}</div>
                 <div className="col-span-2 text-right">
                   <button
-                    className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-3 py-2 text-xs"
                     onClick={() => (window.location.href = `/settings/carriers/${c.id}`)}
                   >
                     Manage →
@@ -220,18 +220,18 @@ export default function CarriersSettingsPage() {
               </div>
             ))}
 
-          {!loading && filtered.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No carriers.</div>}
+          {!loading && filtered.length === 0 && <div className="px-4 py-6 text-sm text-[var(--text)]/60">No carriers.</div>}
         </div>
       </div>
 
       {/* CREATE MODAL */}
       {createOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="glass rounded-2xl border border-white/10 p-6 w-full max-w-3xl">
+        <div className="fixed inset-0 bg-[var(--bg)]/60 flex items-center justify-center z-50 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6 w-full max-w-3xl">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>
                 <div className="text-lg font-semibold">Add a Carrier</div>
-                <div className="text-xs text-white/55 mt-1">Admin-only.</div>
+                <div className="text-xs text-[var(--text)]/55 mt-1">Admin-only.</div>
               </div>
               <button onClick={() => setCreateOpen(false)} className={closeBtn}>
                 Close
@@ -316,7 +316,7 @@ export default function CarriersSettingsPage() {
               </Field>
 
               <Field label="Active">
-                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3">
                   <input
                     type="checkbox"
                     checked={form.active}
@@ -346,7 +346,7 @@ export default function CarriersSettingsPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
+      <div className="text-[11px] text-[var(--text)]/55 mb-2">{label}</div>
       {children}
     </div>
   )
@@ -366,7 +366,7 @@ function TabBtn({
       onClick={onClick}
       className={[
         'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
-        active ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10 hover:bg-white/10',
+        active ? 'bg-[var(--panel2)] border-white/15' : 'bg-[var(--panel)] border-[var(--border)] hover:bg-[var(--panel2)]',
       ].join(' ')}
     >
       {children}
@@ -375,13 +375,13 @@ function TabBtn({
 }
 
 const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
+  'w-full rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
+const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel2)] transition rounded-2xl border border-[var(--border)]'
 
 const closeBtn =
-  'rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-3 text-sm font-semibold'
+  'rounded-2xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-4 py-3 text-sm font-semibold'
 
 const saveBtn =
   'rounded-2xl bg-green-600 hover:bg-green-500 transition px-5 py-3 text-sm font-semibold'

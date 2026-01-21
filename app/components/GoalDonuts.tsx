@@ -82,10 +82,10 @@ function GoalDonut({ title, current, goal, accent = 'blue' }: GoalProps) {
   }, [title, current, goal, pct])
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="text-sm font-semibold">{title}</div>
-        <div className="text-xs text-white/60">
+        <div className="text-xs text-[var(--text)]/60">
           {current} / {goal}
         </div>
       </div>
@@ -94,7 +94,7 @@ function GoalDonut({ title, current, goal, accent = 'blue' }: GoalProps) {
         <Doughnut data={data} options={options} />
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <div className="text-2xl font-semibold tracking-tight">{pct}%</div>
-          <div className="text-xs text-white/60">Complete</div>
+          <div className="text-xs text-[var(--text)]/60">Complete</div>
         </div>
       </div>
     </div>

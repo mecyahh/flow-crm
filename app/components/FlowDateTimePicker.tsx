@@ -59,14 +59,14 @@ function TimePicker({ value, onChange }: { value: string; onChange: (v: string) 
       <button
         type="button"
         onClick={() => setOpen((s) => !s)}
-        className="w-full text-left rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none hover:bg-white/7 transition flex items-center justify-between"
+        className="w-full text-left rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm outline-none hover:bg-white/7 transition flex items-center justify-between"
       >
-        <span className={value ? 'text-white' : 'text-white/50'}>{value || 'Select time'}</span>
-        <span className="text-white/50">🕒</span>
+        <span className={value ? 'text-[var(--text)]' : 'text-[var(--text)]/50'}>{value || 'Select time'}</span>
+        <span className="text-[var(--text)]/50">🕒</span>
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-2 w-full rounded-2xl border border-white/10 bg-[#0b0f1a]/90 backdrop-blur-xl shadow-2xl overflow-hidden">
+        <div className="absolute z-50 mt-2 w-full rounded-2xl border border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-xl shadow-2xl overflow-hidden">
           <div className="max-h-[280px] overflow-auto p-2">
             {slots.map((t) => {
               const active = t === value
@@ -81,8 +81,8 @@ function TimePicker({ value, onChange }: { value: string; onChange: (v: string) 
                   className={[
                     'w-full text-left px-3 py-2 rounded-xl text-sm border transition',
                     active
-                      ? 'bg-blue-600 border-blue-500/60 text-white'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10',
+                      ? 'bg-blue-600 border-blue-500/60 text-[var(--text)]'
+                      : 'bg-[var(--panel)] border-[var(--border)] hover:bg-[var(--panel2)]',
                   ].join(' ')}
                 >
                   {t}

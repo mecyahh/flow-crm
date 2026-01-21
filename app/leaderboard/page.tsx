@@ -171,19 +171,19 @@ export default function LeaderboardPage() {
   const rest = leaderboard
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       <div className="ml-64 px-10 py-10">
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
-            <p className="text-sm text-white/60 mt-1">Agency-wide monthly production + weekly consistency.</p>
+            <p className="text-sm text-[var(--text)]/60 mt-1">Agency-wide monthly production + weekly consistency.</p>
           </div>
 
           <button
             onClick={() => window.location.reload()}
-            className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold"
+            className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--panel2)] transition px-4 py-2 text-sm font-semibold"
           >
             Refresh
           </button>
@@ -211,16 +211,16 @@ export default function LeaderboardPage() {
         </div>
 
         {/* FULL TABLE */}
-        <div className="glass rounded-2xl border border-white/10 overflow-hidden">
-          <div className="px-6 py-4 bg-white/5 flex items-center justify-between">
+        <div className="glass rounded-2xl border border-[var(--border)] overflow-hidden">
+          <div className="px-6 py-4 bg-[var(--panel)] flex items-center justify-between">
             <div className="text-sm font-semibold">All Agents</div>
-            <div className="text-xs text-white/60">{loading ? 'Loading…' : `${rest.length} agents`}</div>
+            <div className="text-xs text-[var(--text)]/60">{loading ? 'Loading…' : `${rest.length} agents`}</div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-[11px] text-white/55">
-                <tr className="border-b border-white/10">
+              <thead className="text-[11px] text-[var(--text)]/55">
+                <tr className="border-b border-[var(--border)]">
                   <th className="text-left px-6 py-3 whitespace-nowrap">Rank</th>
                   <th className="text-left px-6 py-3 whitespace-nowrap">Agent</th>
 
@@ -239,14 +239,14 @@ export default function LeaderboardPage() {
                   rest.map((r, i) => {
                     const daily = dailyPremiumByUser.get(r.uid) || new Map<string, number>()
                     return (
-                      <tr key={r.uid} className="border-b border-white/10 hover:bg-white/5 transition">
+                      <tr key={r.uid} className="border-b border-[var(--border)] hover:bg-[var(--panel)] transition">
                         <td className="px-6 py-4 font-semibold whitespace-nowrap">{i + 1}</td>
                         <td className="px-6 py-4 whitespace-nowrap">{r.name}</td>
 
                         {last7Days.map((d) => {
                           if (d.isSunday) {
                             return (
-                              <td key={d.key} className="px-4 py-4 text-center text-white/40 font-semibold whitespace-nowrap">
+                              <td key={d.key} className="px-4 py-4 text-center text-[var(--text)]/40 font-semibold whitespace-nowrap">
                                 --
                               </td>
                             )
@@ -275,7 +275,7 @@ export default function LeaderboardPage() {
 
                 {!loading && rest.length === 0 && (
                   <tr>
-                    <td className="px-6 py-6 text-white/60" colSpan={3 + last7Days.length}>
+                    <td className="px-6 py-6 text-[var(--text)]/60" colSpan={3 + last7Days.length}>
                       No data yet.
                     </td>
                   </tr>
@@ -283,7 +283,7 @@ export default function LeaderboardPage() {
 
                 {loading && (
                   <tr>
-                    <td className="px-6 py-6 text-white/60" colSpan={3 + last7Days.length}>
+                    <td className="px-6 py-6 text-[var(--text)]/60" colSpan={3 + last7Days.length}>
                       Loading…
                     </td>
                   </tr>
@@ -293,7 +293,7 @@ export default function LeaderboardPage() {
           </div>
         </div>
 
-        <div className="mt-3 text-[11px] text-white/45">Sundays show “--”. All other days: 0 = bold red, production = green.</div>
+        <div className="mt-3 text-[11px] text-[var(--text)]/45">Sundays show “--”. All other days: 0 = bold red, production = green.</div>
       </div>
     </div>
   )
@@ -313,8 +313,8 @@ function PodiumCard({
   return (
     <div
       className={[
-        'relative rounded-2xl border border-white/10 bg-white/5 p-6 overflow-hidden',
-        spotlight ? 'md:-translate-y-2 bg-white/10' : '',
+        'relative rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-6 overflow-hidden',
+        spotlight ? 'md:-translate-y-2 bg-[var(--panel2)]' : '',
       ].join(' ')}
     >
       {spotlight && (
@@ -325,15 +325,15 @@ function PodiumCard({
       )}
 
       <div className="relative">
-        <div className="text-xs text-white/60">Rank</div>
+        <div className="text-xs text-[var(--text)]/60">Rank</div>
         <div className="mt-1 text-3xl font-extrabold">{rank}</div>
 
-        <div className="mt-4 text-xs text-white/60">Agent</div>
+        <div className="mt-4 text-xs text-[var(--text)]/60">Agent</div>
         <div className={spotlight ? 'mt-1 text-xl font-extrabold' : 'mt-1 text-lg font-semibold'}>
           {data?.name || '—'}
         </div>
 
-        <div className="mt-4 text-xs text-white/60">Premium</div>
+        <div className="mt-4 text-xs text-[var(--text)]/60">Premium</div>
         <div
           className={
             spotlight ? 'mt-1 text-3xl font-extrabold text-green-300' : 'mt-1 text-2xl font-bold text-green-300'

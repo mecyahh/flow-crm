@@ -11,23 +11,23 @@ export default function LeaderboardError({
   reset: () => void
 }) {
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white flex items-center justify-center p-6">
-      <div className="rounded-2xl border border-white/10 bg-white/10 backdrop-blur-xl p-6 max-w-xl w-full">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex items-center justify-center p-6">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel2)] backdrop-blur-xl p-6 max-w-xl w-full">
         <div className="text-xl font-semibold">Leaderboard crashed</div>
-        <div className="mt-2 text-sm text-white/70">
+        <div className="mt-2 text-sm text-[var(--text)]/70">
           {error?.message || 'Unknown error'}
         </div>
 
         <div className="mt-5 flex gap-2">
           <button
             onClick={() => reset()}
-            className="rounded-xl border border-white/10 bg-white/10 hover:bg-white/20 transition px-4 py-2 text-sm font-semibold"
+            className="rounded-xl border border-[var(--border)] bg-[var(--panel2)] hover:bg-white/20 transition px-4 py-2 text-sm font-semibold"
           >
             Try again
           </button>
           <button
             onClick={() => window.location.reload()}
-            className="rounded-xl border border-white/10 bg-white/10 hover:bg-white/20 transition px-4 py-2 text-sm font-semibold"
+            className="rounded-xl border border-[var(--border)] bg-[var(--panel2)] hover:bg-white/20 transition px-4 py-2 text-sm font-semibold"
           >
             Refresh
           </button>
@@ -39,7 +39,7 @@ export default function LeaderboardError({
           </a>
         </div>
 
-        <div className="mt-4 text-[11px] text-white/50">
+        <div className="mt-4 text-[11px] text-[var(--text)]/50">
           If it keeps happening, open browser console and copy the first red error line.
         </div>
       </div>

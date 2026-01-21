@@ -85,7 +85,7 @@ export default function CarrierDonut({
     <div className="h-56 w-full relative">
       <Doughnut data={data} options={options} />
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <div className="text-xs text-white/60">Top Carrier</div>
+        <div className="text-xs text-[var(--text)]/60">Top Carrier</div>
         <div className="text-lg font-semibold">{top.name}</div>
         <div className="text-xs font-semibold text-blue-300 mt-1">{top.pct}%</div>
       </div>

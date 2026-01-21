@@ -324,12 +324,12 @@ export default function AnalyticsPage() {
   }, [parsed])
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
+          <div className="glass px-5 py-4 rounded-2xl border border-[var(--border)] shadow-2xl">
             <div className="text-sm font-semibold">{toast}</div>
             <div className="mt-3 flex gap-2">
               <button className={btnSoft} onClick={() => setToast(null)}>
@@ -344,7 +344,7 @@ export default function AnalyticsPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Analytics</h1>
-            <p className="text-sm text-white/60 mt-1">Custom range for everything • clean signal.</p>
+            <p className="text-sm text-[var(--text)]/60 mt-1">Custom range for everything • clean signal.</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -355,11 +355,11 @@ export default function AnalyticsPage() {
         </div>
 
         {/* RANGE */}
-        <div className="glass rounded-2xl border border-white/10 p-6 mb-6">
+        <div className="glass rounded-2xl border border-[var(--border)] p-6 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <div className="text-sm font-semibold">Date Range</div>
-              <div className="text-xs text-white/55 mt-1">Applies to all analytics on this page.</div>
+              <div className="text-xs text-[var(--text)]/55 mt-1">Applies to all analytics on this page.</div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -369,7 +369,7 @@ export default function AnalyticsPage() {
                   onClick={() => setRangeMode(k)}
                   className={[
                     'rounded-2xl border px-4 py-2 text-sm font-semibold transition',
-                    rangeMode === k ? 'bg-white/10 border-white/15' : 'bg-white/5 border-white/10 hover:bg-white/10',
+                    rangeMode === k ? 'bg-[var(--panel2)] border-white/15' : 'bg-[var(--panel)] border-[var(--border)] hover:bg-[var(--panel2)]',
                   ].join(' ')}
                 >
                   {k === 'this_week'
@@ -386,13 +386,13 @@ export default function AnalyticsPage() {
 
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <div className="text-[11px] text-white/55 mb-2">Start</div>
+              <div className="text-[11px] text-[var(--text)]/55 mb-2">Start</div>
               <FlowDatePicker value={rangeStart} onChange={setRangeStart} placeholder="Start date" />
             </div>
             <div>
-              <div className="text-[11px] text-white/55 mb-2">End (exclusive)</div>
+              <div className="text-[11px] text-[var(--text)]/55 mb-2">End (exclusive)</div>
               <FlowDatePicker value={rangeEnd} onChange={setRangeEnd} placeholder="End date" />
-              <div className="text-[11px] text-white/50 mt-2">Tip: end is exclusive (set to tomorrow for “through today”).</div>
+              <div className="text-[11px] text-[var(--text)]/50 mt-2">Tip: end is exclusive (set to tomorrow for “through today”).</div>
             </div>
           </div>
         </div>
@@ -407,31 +407,31 @@ export default function AnalyticsPage() {
 
         {/* ADVANCED KPIs */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="text-sm font-semibold">Average time between deals</div>
-            <div className="text-xs text-white/55 mt-1">Average gap between consecutive deal submissions.</div>
+            <div className="text-xs text-[var(--text)]/55 mt-1">Average gap between consecutive deal submissions.</div>
 
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs text-white/50">Avg gap</div>
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
+              <div className="text-xs text-[var(--text)]/50">Avg gap</div>
               <div className="mt-1 text-3xl font-semibold">{loading ? '—' : humanGap(avgTimeBetweenDeals)}</div>
             </div>
           </div>
 
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="text-sm font-semibold">Average AP per agent</div>
-            <div className="text-xs text-white/55 mt-1">Average of each agent’s AP per deal (active agents).</div>
+            <div className="text-xs text-[var(--text)]/55 mt-1">Average of each agent’s AP per deal (active agents).</div>
 
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs text-white/50">Avg</div>
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4">
+              <div className="text-xs text-[var(--text)]/50">Avg</div>
               <div className="mt-1 text-3xl font-semibold">{loading ? '—' : `$${formatMoney2(avgAPPerAgent)}`}</div>
             </div>
           </div>
 
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="text-sm font-semibold">Agents under ${formatMoney2(WEEKLY_UNDER_AP)} AP</div>
-            <div className="text-xs text-white/55 mt-1">In the selected range.</div>
+            <div className="text-xs text-[var(--text)]/55 mt-1">In the selected range.</div>
 
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
               <Row head left="Agent" mid="AP" right="Deals" />
               {(loading ? [] : under5kAgents.slice(0, 10)).map((a) => (
                 <Row key={a.agent_id} left={a.name} mid={`$${formatMoney2(a.ap)}`} right={String(a.deals)} dangerMid />
@@ -439,33 +439,33 @@ export default function AnalyticsPage() {
               {!loading && under5kAgents.length === 0 && <Row left="—" mid="None ✅" right="—" />}
             </div>
 
-            <div className="mt-3 text-[11px] text-white/50">Shows bottom performers first.</div>
+            <div className="mt-3 text-[11px] text-[var(--text)]/50">Shows bottom performers first.</div>
           </div>
         </section>
 
         {/* TREND + BREAKDOWNS */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 glass rounded-2xl border border-white/10 p-6">
+          <div className="lg:col-span-2 glass rounded-2xl border border-[var(--border)] p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Daily AP Trend</h2>
-              <span className="text-xs text-white/60">{rangeStart} → {rangeEnd}</span>
+              <span className="text-xs text-[var(--text)]/60">{rangeStart} → {rangeEnd}</span>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 overflow-hidden">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 overflow-hidden">
               <MiniAreaChart data={dailyAP.map((x) => x.ap)} max={trendMax} />
-              <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-2 text-[11px] text-white/45">
+              <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-2 text-[11px] text-[var(--text)]/45">
                 {dailyAP.slice(Math.max(0, dailyAP.length - 8)).map((x) => (
                   <div key={x.label} className="truncate">
-                    {x.label.slice(5)}: <span className="text-white/70">${formatMoney2(x.ap)}</span>
+                    {x.label.slice(5)}: <span className="text-[var(--text)]/70">${formatMoney2(x.ap)}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="glass rounded-2xl border border-white/10 p-6">
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
             <div className="text-base font-semibold mb-4">By Carrier</div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
               <Row head left="Carrier" mid="AP" right="Deals" />
               {(loading ? [] : byCarrier.slice(0, 10)).map((c) => (
                 <Row key={c.carrier} left={c.carrier} mid={`$${formatMoney2(c.ap)}`} right={String(c.deals)} />
@@ -476,19 +476,19 @@ export default function AnalyticsPage() {
         </section>
 
         {/* NON WRITERS */}
-        <section className="mt-6 glass rounded-2xl border border-white/10 p-6">
+        <section className="mt-6 glass rounded-2xl border border-[var(--border)] p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-base font-semibold">Non Writers</h2>
-              <div className="text-xs text-white/55 mt-1">Agents with 0 deals in the selected range.</div>
+              <div className="text-xs text-[var(--text)]/55 mt-1">Agents with 0 deals in the selected range.</div>
             </div>
 
-            <div className="text-xs text-white/60">
-              Total: <span className="text-white font-semibold">{loading ? '—' : nonWriters.length}</span>
+            <div className="text-xs text-[var(--text)]/60">
+              Total: <span className="text-[var(--text)] font-semibold">{loading ? '—' : nonWriters.length}</span>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden">
             <Row head left="Agent" mid="Email" right="Status" />
             {(loading ? [] : nonWriters.slice(0, 40)).map((n) => (
               <Row key={n.id} left={n.name} mid={n.email || '—'} right="0 deals" dangerRight />
@@ -496,7 +496,7 @@ export default function AnalyticsPage() {
             {!loading && nonWriters.length === 0 && <Row left="—" mid="Everyone wrote ✅" right="—" />}
           </div>
 
-          <div className="mt-3 text-[11px] text-white/50">If you want a full export button here, say “1”.</div>
+          <div className="mt-3 text-[11px] text-[var(--text)]/50">If you want a full export button here, say “1”.</div>
         </section>
       </div>
     </div>
@@ -507,8 +507,8 @@ export default function AnalyticsPage() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="glass rounded-2xl border border-white/10 p-6">
-      <p className="text-sm text-white/60">{label}</p>
+    <div className="glass rounded-2xl border border-[var(--border)] p-6">
+      <p className="text-sm text-[var(--text)]/60">{label}</p>
       <p className="text-2xl font-semibold mt-1">{value}</p>
     </div>
   )
@@ -532,8 +532,8 @@ function Row({
   return (
     <div
       className={[
-        'grid grid-cols-3 px-4 py-3 border-b border-white/10',
-        head ? 'text-xs text-white/60 bg-white/5' : 'text-sm',
+        'grid grid-cols-3 px-4 py-3 border-b border-[var(--border)]',
+        head ? 'text-xs text-[var(--text)]/60 bg-[var(--panel)]' : 'text-sm',
       ].join(' ')}
     >
       <div className="truncate">{left}</div>
@@ -655,5 +655,5 @@ function humanGap(ms: number) {
 }
 
 const btnGlass =
-  'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
+  'glass px-4 py-2 text-sm font-medium hover:bg-[var(--panel2)] transition rounded-2xl border border-[var(--border)]'
+const btnSoft = 'rounded-xl bg-[var(--panel2)] hover:bg-white/15 transition px-3 py-2 text-xs'
