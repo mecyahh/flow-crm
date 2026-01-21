@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Sidebar from '../components/Sidebar'
+import FlowDatePicker from '@/app/components/FlowDatePicker'
 import FlowLineChart from '../components/FlowLineChart'
 import CarrierDonut from '../components/CarrierDonut'
 import { supabase } from '@/lib/supabaseClient'
@@ -67,10 +68,15 @@ export default function DashboardPage() {
   // ✅ Light/Dark toggle (UI-only; doesn’t change existing theme tokens)
   const [darkMode, setDarkMode] = useState<boolean>(true)
 
-  // ✅ Date selector (thin, sleek) for chart + KPI scope
-  const [dateOpen, setDateOpen] = useState(false)
-  const [rangeStart, setRangeStart] = useState<string>('') // YYYY-MM-DD
-  const [rangeEnd, setRangeEnd] = useState<string>('') // YYYY-MM-DD
+ const [date, setDate] = useState('') // YYYY-MM-DD
+
+<div className="w-[240px]">
+  <FlowDatePicker
+    value={date}
+    onChange={setDate}
+    placeholder="Select date"
+  />
+</div>
 
   // ✅ Downlines/team scope
   const [teamIds, setTeamIds] = useState<string[] | null>(null)
