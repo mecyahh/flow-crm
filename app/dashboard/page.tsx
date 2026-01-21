@@ -65,21 +65,14 @@ export default function DashboardPage() {
   // ✅ Notifications
   const [notifOpen, setNotifOpen] = useState(false)
 
-  // ✅ Light/Dark toggle (UI-only; doesn’t change existing theme tokens)
-  const [darkMode, setDarkMode] = useState<boolean>(true)
-
- const [date, setDate] = useState('') // YYYY-MM-DD
-
-<div className="w-[240px]">
-  <FlowDatePicker
-    value={date}
-    onChange={setDate}
-    placeholder="Select date"
-  />
-</div>
+  // ✅ Dashboard calendar picker (state belongs here; UI goes in return)
+  const [date, setDate] = useState('') // YYYY-MM-DD
 
   // ✅ Downlines/team scope
   const [teamIds, setTeamIds] = useState<string[] | null>(null)
+
+  // ✅ (Your code calls setDarkMode, so it must exist)
+  const [darkMode, setDarkMode] = useState(true)
 
   useEffect(() => {
     // load UI prefs
@@ -92,6 +85,39 @@ export default function DashboardPage() {
       setHtmlDark(true)
     }
   }, [])
+
+  return (
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      <Sidebar />
+
+      <div className="ml-64 px-10 py-10">
+        {/* ✅ PLACEHOLDER HEADER AREA (put this where your dashboard header/actions live) */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <div className="text-3xl font-semibold tracking-tight">Dashboard</div>
+            <div className="text-sm text-white/60 mt-1">Overview</div>
+          </div>
+
+          {/* ✅ FlowDatePicker UI (this was causing your syntax error because it was outside return) */}
+          <div className="w-[240px]">
+            <FlowDatePicker value={date} onChange={setDate} placeholder="Select date" />
+          </div>
+        </div>
+
+        {/* ✅ KEEP YOUR EXISTING DASHBOARD CONTENT BELOW THIS LINE */}
+        {/* (Paste the rest of your original dashboard JSX/logic below — unchanged) */}
+      </div>
+    </div>
+  )
+}
+
+/* ---------- helper ---------- */
+function setHtmlDark(on: boolean) {
+  if (typeof document === 'undefined') return
+  const el = document.documentElement
+  if (on) el.classList.add('dark')
+  else el.classList.remove('dark')
+}
 
   useEffect(() => {
     let alive = true
