@@ -1,12 +1,21 @@
-'use client'
+import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
 
-export const dynamic = 'force-dynamic'
-  
-export default function Home() {
-  return (
-    <main style={{ padding: 40 }}>
-      <h1>One Percent Deal House</h1>
-      <p>App is live.</p>
-    </main>
-  );
+export default async function HomePage() {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies }
+  )
+
+  const { data } = await supabase.auth.getUser()
+
+  // ✅ Logged in → dashboard
+  if (data?.user) {
+    redirect('/dashboard')
+  }
+
+  // ✅ Logged out → login
+  redirect('/login')
 }
