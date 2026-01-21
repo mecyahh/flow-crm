@@ -6,31 +6,24 @@ import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 import FlowDatePicker from '../components/FlowDatePicker'
 
-type Profile = {
-  id: string
-  first_name: string | null
-  last_name: string | null
-  email: string | null
+type Row = {
+  uid: string
+  name: string
   avatar_url?: string | null
-}
-
-type DealRow = {
-  id: string
-  user_id: string | null
-  agent_id: string | null
-  created_at: string
-  premium: any
+  totalAP: number
+  dealCount: number
 }
 
 export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
 
-  const [profiles, setProfiles] = useState<Profile[]>([])
-  const [deals, setDeals] = useState<DealRow[]>([])
-
   // ✅ Week selector uses FlowDatePicker (anchor date; week snaps Mon→Sun)
   const [weekAnchor, setWeekAnchor] = useState<string>('') // YYYY-MM-DD
+
+  // Data from RPC
+  const [rows, setRows] = useState<Row[]>([])
+  const [dailyAPByUser, setDailyAPByUser] = useState<Map<string, Map<string, number>>>(new Map())
 
   useEffect(() => {
     let alive = true
@@ -47,28 +40,10 @@ export default function LeaderboardPage() {
           return
         }
 
-        const { data: profs, error: pErr } = await supabase
-          .from('profiles')
-          .select('id,first_name,last_name,email,avatar_url')
-          .limit(10000)
-        if (pErr) throw new Error(`profiles: ${pErr.message}`)
-
-        // IMPORTANT: support both schemas:
-        // - older: deals.user_id
-        // - newer: deals.agent_id (and possibly user_id too)
-        const { data: ds, error: dErr } = await supabase
-          .from('deals')
-          .select('id,user_id,agent_id,created_at,premium')
-          .order('created_at', { ascending: false })
-          .limit(15000)
-        if (dErr) throw new Error(`deals: ${dErr.message}`)
-
-        if (!alive) return
-        setProfiles((profs || []) as Profile[])
-        setDeals((ds || []) as DealRow[])
-
         // default = today
-        setWeekAnchor(toISODateLocal(new Date()))
+        const today = toISODateLocal(new Date())
+        if (!alive) return
+        setWeekAnchor(today)
 
         setLoading(false)
       } catch (e: any) {
@@ -82,43 +57,6 @@ export default function LeaderboardPage() {
       alive = false
     }
   }, [])
-
-  const profileById = useMemo(() => {
-    const m = new Map<string, Profile>()
-    profiles.forEach((p) => m.set(p.id, p))
-    return m
-  }, [profiles])
-
-  const nameById = useMemo(() => {
-    const m = new Map<string, string>()
-    profiles.forEach((p) => {
-      const n = `${p.first_name || ''} ${p.last_name || ''}`.trim()
-      m.set(p.id, n || p.email || 'Agent')
-    })
-    return m
-  }, [profiles])
-
-  const parsedDeals = useMemo(() => {
-    return (deals || []).map((d) => {
-      const dt = d.created_at ? new Date(d.created_at) : new Date()
-      const premiumNum =
-        typeof d.premium === 'number'
-          ? d.premium
-          : typeof d.premium === 'string'
-          ? Number(d.premium.replace(/[^0-9.]/g, ''))
-          : Number(d.premium || 0)
-
-      const uid = (d.user_id || d.agent_id || '').toString()
-
-      return {
-        ...d,
-        uid,
-        dt,
-        premiumNum: Number.isFinite(premiumNum) ? premiumNum : 0,
-        dateKey: toISODateLocal(dt),
-      }
-    })
-  }, [deals])
 
   // ✅ Week range snaps to Monday start; always 7 days (Mon→Sun)
   const weekRange = useMemo(() => {
@@ -146,77 +84,81 @@ export default function LeaderboardPage() {
     return out
   }, [weekRange.start])
 
-  const weekDeals = useMemo(() => {
-    return parsedDeals.filter((d) => d.dt >= weekRange.start && d.dt <= weekRange.end && !!d.uid)
-  }, [parsedDeals, weekRange.start, weekRange.end])
+  // ✅ Fetch leaderboard for the selected week (agency-wide for EVERYONE)
+  useEffect(() => {
+    let alive = true
 
-  // ✅ Weekly totals PREMIUM (for reference, not used in "Total" now)
-  const weekTotalsPremium = useMemo(() => {
-    const totals = new Map<string, number>()
-    weekDeals.forEach((d) => {
-      if (!d.uid) return
-      totals.set(d.uid, (totals.get(d.uid) || 0) + d.premiumNum)
-    })
-    return totals
-  }, [weekDeals])
+    ;(async () => {
+      try {
+        setErr(null)
+        setLoading(true)
 
-  // ✅ Weekly totals AP (Annual Premium) — premium * 12
-  const weekTotalsAP = useMemo(() => {
-    const totals = new Map<string, number>()
-    weekDeals.forEach((d) => {
-      if (!d.uid) return
-      const ap = Number(d.premiumNum || 0) * 12
-      totals.set(d.uid, (totals.get(d.uid) || 0) + ap)
-    })
-    return totals
-  }, [weekDeals])
+        const { data: userRes } = await supabase.auth.getUser()
+        if (!userRes.user) {
+          window.location.href = '/login'
+          return
+        }
 
-  // Daily AP per user per dateKey (premium * 12)
-  const dailyAPByUser = useMemo(() => {
-    const map = new Map<string, Map<string, number>>() // uid -> (dateKey -> AP sum)
+        const startTs = weekRange.start.toISOString()
+        const endTs = weekRange.end.toISOString()
 
-    weekDeals.forEach((d) => {
-      if (!d.uid) return
-      if (!map.has(d.uid)) map.set(d.uid, new Map<string, number>())
-      const inner = map.get(d.uid)!
+        // ✅ RPC bypasses deals RLS safely (security definer)
+        const { data, error } = await supabase.rpc('get_weekly_leaderboard', {
+          start_ts: startTs,
+          end_ts: endTs,
+        })
 
-      const ap = Number(d.premiumNum || 0) * 12
-      inner.set(d.dateKey, (inner.get(d.dateKey) || 0) + ap)
-    })
+        if (error) throw new Error(`get_weekly_leaderboard: ${error.message}`)
 
-    return map
-  }, [weekDeals])
+        const list = (data || []) as any[]
 
-  // ✅ Leaderboard follows the selected week
-  // - ranking uses weekly AP
-  // - Total column uses weekly AP (fix: was premium before)
-  const leaderboard = useMemo(() => {
-    const allUids = new Set<string>()
-    weekDeals.forEach((d) => d.uid && allUids.add(d.uid))
+        const nextRows: Row[] = list.map((r) => ({
+          uid: String(r.uid),
+          name: String(r.name || 'Agent'),
+          avatar_url: r.avatar_url ?? null,
+          totalAP: Number(r.total_ap || 0),
+          dealCount: Number(r.deal_count || 0),
+        }))
 
-    const rows = Array.from(allUids.values()).map((uid) => {
-      const name = nameById.get(uid) || 'Agent'
-      const p = profileById.get(uid)
-      const avatar_url = p?.avatar_url || null
-      const totalPremium = weekTotalsPremium.get(uid) || 0
-      const totalAP = weekTotalsAP.get(uid) || 0
-      return { uid, name, avatar_url, totalPremium, totalAP }
-    })
+        // Build daily map uid -> (YYYY-MM-DD -> AP)
+        const dayMap = new Map<string, Map<string, number>>()
+        list.forEach((r) => {
+          const uid = String(r.uid)
+          const obj = (r.daily_ap || {}) as Record<string, any>
+          const inner = new Map<string, number>()
+          Object.keys(obj).forEach((k) => inner.set(k, Number(obj[k] || 0)))
+          dayMap.set(uid, inner)
+        })
 
-    rows.sort((a, b) => b.totalAP - a.totalAP)
-    return rows
-  }, [weekDeals, nameById, profileById, weekTotalsPremium, weekTotalsAP])
+        if (!alive) return
+        setRows(nextRows)
+        setDailyAPByUser(dayMap)
+        setLoading(false)
+      } catch (e: any) {
+        if (!alive) return
+        setErr(e?.message || 'Leaderboard error')
+        setRows([])
+        setDailyAPByUser(new Map())
+        setLoading(false)
+      }
+    })()
 
+    return () => {
+      alive = false
+    }
+  }, [weekRange.start, weekRange.end])
+
+  const leaderboard = rows // already sorted by SQL (desc AP)
   const top3 = leaderboard.slice(0, 3)
   const rest = leaderboard
 
-  // ✅ Top summary cards
+  // ✅ Top summary cards (computed from RPC results)
   const agencySummary = useMemo(() => {
-    const productionAP = weekDeals.reduce((s, d) => s + Number(d.premiumNum || 0) * 12, 0)
-    const families = weekDeals.length
-    const writers = new Set(weekDeals.map((d) => d.uid).filter(Boolean) as string[]).size
+    const productionAP = rest.reduce((s, r) => s + Number(r.totalAP || 0), 0)
+    const families = rest.reduce((s, r) => s + Number(r.dealCount || 0), 0)
+    const writers = rest.length
     return { productionAP, families, writers }
-  }, [weekDeals])
+  }, [rest])
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
@@ -291,7 +233,11 @@ export default function LeaderboardPage() {
 
         {/* ✅ Top-left week selector (FlowDatePicker — glass UI) */}
         <div className="mb-6 max-w-[320px]">
-          <FlowDatePicker value={weekAnchor} onChange={(v) => setWeekAnchor(v || toISODateLocal(new Date()))} placeholder="Select week" />
+          <FlowDatePicker
+            value={weekAnchor}
+            onChange={(v) => setWeekAnchor(v || toISODateLocal(new Date()))}
+            placeholder="Select week"
+          />
           <div className="mt-2 text-[11px] text-white/45">
             Week: {toISODateLocal(weekRange.start)} → {toISODateLocal(weekRange.end)} (Mon → Sun)
           </div>
@@ -304,16 +250,20 @@ export default function LeaderboardPage() {
           <MiniStat label="Writing Agents" value={loading ? '—' : String(agencySummary.writers)} />
         </div>
 
-        {/* ✅ TOP 3 PODIUM (animated, faces big on right) */}
+        {/* ✅ TOP 3 PODIUM */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="order-2 md:order-1">
-            <PodiumCard rank={2} data={top3[1]} />
+            <PodiumCard rank={2} data={top3[1] ? { name: top3[1].name, avatar_url: top3[1].avatar_url, totalAP: top3[1].totalAP } : undefined} />
           </div>
           <div className="order-1 md:order-2">
-            <PodiumCard rank={1} data={top3[0]} spotlight />
+            <PodiumCard
+              rank={1}
+              spotlight
+              data={top3[0] ? { name: top3[0].name, avatar_url: top3[0].avatar_url, totalAP: top3[0].totalAP } : undefined}
+            />
           </div>
           <div className="order-3 md:order-3">
-            <PodiumCard rank={3} data={top3[2]} />
+            <PodiumCard rank={3} data={top3[2] ? { name: top3[2].name, avatar_url: top3[2].avatar_url, totalAP: top3[2].totalAP } : undefined} />
           </div>
         </div>
 
@@ -337,7 +287,6 @@ export default function LeaderboardPage() {
                     </th>
                   ))}
 
-                  {/* ✅ Total is now Annual Premium (AP) */}
                   <th className="text-right px-6 py-3 whitespace-nowrap">Total AP</th>
                 </tr>
               </thead>
@@ -428,8 +377,8 @@ function PodiumCard({
     rank === 1
       ? { ring: 'ring-yellow-300/25', badge: 'bg-yellow-400/15 text-yellow-200 border-yellow-300/25' }
       : rank === 2
-      ? { ring: 'ring-white/20', badge: 'bg-white/10 text-white/85 border-white/20' } // ✅ silver tone
-      : { ring: 'ring-orange-500/20', badge: 'bg-orange-500/10 text-orange-200 border-orange-400/25' } // ✅ bronze tone
+      ? { ring: 'ring-white/20', badge: 'bg-white/10 text-white/85 border-white/20' }
+      : { ring: 'ring-orange-500/20', badge: 'bg-orange-500/10 text-orange-200 border-orange-400/25' }
 
   return (
     <div
@@ -448,7 +397,6 @@ function PodiumCard({
         </div>
       )}
 
-      {/* layout: left = data, right = BIG face */}
       <div className="relative p-6 flex items-stretch gap-5">
         <div className="min-w-0 flex-1">
           <div className="text-xs text-white/60">Rank</div>
@@ -465,7 +413,6 @@ function PodiumCard({
           </div>
         </div>
 
-        {/* ✅ big face area */}
         <div className="relative w-[120px] md:w-[140px] shrink-0">
           <div className={['absolute inset-0 rounded-2xl overflow-hidden border border-white/10 bg-white/5 ring-1', rankTone.ring].join(' ')}>
             {data?.avatar_url ? (
@@ -478,7 +425,6 @@ function PodiumCard({
             )}
           </div>
 
-          {/* ✅ crown scales over the image for #1 */}
           {rank === 1 && (
             <div className="absolute -top-6 -left-4 crown-anim">
               <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center text-3xl md:text-4xl">
@@ -487,7 +433,6 @@ function PodiumCard({
             </div>
           )}
 
-          {/* subtle rank badge */}
           <div className={['absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-xl border text-[11px] font-bold', rankTone.badge].join(' ')}>
             #{rank}
           </div>
@@ -524,7 +469,7 @@ function toISODateLocal(d: Date) {
 function startOfWeekMonday(d: Date) {
   const dt = new Date(d)
   dt.setHours(0, 0, 0, 0)
-  const day = dt.getDay() // 0..6
+  const day = dt.getDay()
   const diff = day === 0 ? -6 : 1 - day
   dt.setDate(dt.getDate() + diff)
   return dt
