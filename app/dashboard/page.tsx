@@ -1,19 +1,3 @@
-Here is my dashboard code, I do not want anything changed as far as format or behaviors, but i need these things added into addition: 
-
-Notifications need to show in top right with active feedback on follow ups, recent deals, goals reached, etc
-Leaderboard on the right hand side needs to show the agents profile picture and not their icon or generic default
-Edit goals tab needs to be in financial values, for commas, decimals and locked so there’s no free text
-Leaderboard donut chart needs same UI effect as goals donut progress charts have
-DATA SELECTOR CALENDAR SAMe as in the top right corner at the top of the three cards .this must be sleek, thin, accessible, and reflects daat from the datas submitted
-Flow trend chart should be clickable, when hovered over it should show realtime updates and color changes like stocks, red, blue, green
-Dashboard Top production card should only show personal production for solo agents
-Agents with downlines should how the entire teams production
-Top right corner i should have a dark mode and light mode toggle switch
-
-
-
-
-
 // ✅ REPLACE ENTIRE FILE: /app/dashboard/page.tsx
 'use client'
 
@@ -39,17 +23,29 @@ type Profile = {
   last_name: string | null
   role: string
   is_agency_owner: boolean
+  upline_id?: string | null
+  avatar_url?: string | null
 }
 
 type LeaderRow = {
   user_id: string
   name: string
   ap: number
+  avatar_url?: string | null
 }
 
 type UserGoals = {
   weekly_goal_ap: number
   monthly_goal_ap: number
+}
+
+type Notif = {
+  id: string
+  title: string
+  body?: string
+  ts: Date
+  kind: 'followup' | 'deal' | 'goal' | 'system'
+  href?: string
 }
 
 export default function DashboardPage() {
@@ -62,8 +58,34 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState<UserGoals>({ weekly_goal_ap: 2500, monthly_goal_ap: 10000 })
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [goalsSaving, setGoalsSaving] = useState(false)
-  const [goalW, setGoalW] = useState('2500')
-  const [goalM, setGoalM] = useState('10000')
+  const [goalW, setGoalW] = useState('2,500.00')
+  const [goalM, setGoalM] = useState('10,000.00')
+
+  // ✅ Notifications
+  const [notifOpen, setNotifOpen] = useState(false)
+
+  // ✅ Light/Dark toggle (UI-only; doesn’t change existing theme tokens)
+  const [darkMode, setDarkMode] = useState<boolean>(true)
+
+  // ✅ Date selector (thin, sleek) for chart + KPI scope
+  const [dateOpen, setDateOpen] = useState(false)
+  const [rangeStart, setRangeStart] = useState<string>('') // YYYY-MM-DD
+  const [rangeEnd, setRangeEnd] = useState<string>('') // YYYY-MM-DD
+
+  // ✅ Downlines/team scope
+  const [teamIds, setTeamIds] = useState<string[] | null>(null)
+
+  useEffect(() => {
+    // load UI prefs
+    try {
+      const raw = localStorage.getItem('flow_dark')
+      const next = raw ? raw === '1' : true
+      setDarkMode(next)
+      setHtmlDark(next)
+    } catch {
+      setHtmlDark(true)
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -88,16 +110,42 @@ export default function DashboardPage() {
       if (!alive) return
       await loadGoals(user.id)
 
+      // Set default date range = this month (matches current behavior)
+      const now = new Date()
+      const ms = new Date(now.getFullYear(), now.getMonth(), 1)
+      const meIso = toYMD(now)
+      const msIso = toYMD(ms)
+      setRangeStart(msIso)
+      setRangeEnd(meIso)
+
       const isOwnerOrAdmin = !!(profile && (profile.role === 'admin' || profile.is_agency_owner))
 
-      // Deals feed: agent = own, owner/admin = all
+      // ✅ Build teamIds for non-admin users (so "agents with downlines show team production")
+      let computedTeamIds: string[] = [user.id]
+      try {
+        computedTeamIds = await buildTeamIds(user.id)
+      } catch {
+        computedTeamIds = [user.id]
+      }
+      if (!alive) return
+      setTeamIds(computedTeamIds)
+
+      // Deals feed:
+      // - admin/owner: all (unchanged)
+      // - non-admin with downlines: team
+      // - solo agent: own
       const base = supabase
         .from('deals')
         .select('id,user_id,created_at,premium,company')
         .order('created_at', { ascending: false })
         .limit(2000)
 
-      const { data, error } = isOwnerOrAdmin ? await base : await base.eq('user_id', user.id)
+      const hasDownlines = computedTeamIds.length > 1
+      const { data, error } = isOwnerOrAdmin
+        ? await base
+        : hasDownlines
+        ? await base.in('user_id', computedTeamIds)
+        : await base.eq('user_id', user.id)
 
       if (!alive) return
 
@@ -124,9 +172,37 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  async function buildTeamIds(rootId: string) {
+    // Pull all profiles (id,upline_id) and build a simple graph
+    const { data, error } = await supabase.from('profiles').select('id,upline_id').limit(50000)
+    if (error || !data) return [rootId]
+
+    const children = new Map<string, string[]>()
+    ;(data as any[]).forEach((p) => {
+      const up = p.upline_id || null
+      if (!up) return
+      if (!children.has(up)) children.set(up, [])
+      children.get(up)!.push(p.id)
+    })
+
+    const out: string[] = []
+    const q: string[] = [rootId]
+    const seen = new Set<string>()
+
+    // BFS (includes root)
+    while (q.length) {
+      const cur = q.shift()!
+      if (seen.has(cur)) continue
+      seen.add(cur)
+      out.push(cur)
+      const kids = children.get(cur) || []
+      kids.forEach((k) => q.push(k))
+      if (out.length > 2500) break // safety
+    }
+    return out
+  }
+
   async function loadGoals(uid: string) {
-    // Preferred: user_goals table (user_id PK)
-    // Fallback: localStorage
     try {
       const { data, error } = await supabase
         .from('user_goals')
@@ -142,8 +218,8 @@ export default function DashboardPage() {
           monthly_goal_ap: Number.isFinite(m) && m > 0 ? m : 10000,
         }
         setGoals(next)
-        setGoalW(String(next.weekly_goal_ap))
-        setGoalM(String(next.monthly_goal_ap))
+        setGoalW(formatMoneyInput(next.weekly_goal_ap))
+        setGoalM(formatMoneyInput(next.monthly_goal_ap))
         return
       }
     } catch {}
@@ -159,16 +235,15 @@ export default function DashboardPage() {
           monthly_goal_ap: Number.isFinite(m) && m > 0 ? m : 10000,
         }
         setGoals(next)
-        setGoalW(String(next.weekly_goal_ap))
-        setGoalM(String(next.monthly_goal_ap))
+        setGoalW(formatMoneyInput(next.weekly_goal_ap))
+        setGoalM(formatMoneyInput(next.monthly_goal_ap))
         return
       }
     } catch {}
 
-    // default
     setGoals({ weekly_goal_ap: 2500, monthly_goal_ap: 10000 })
-    setGoalW('2500')
-    setGoalM('10000')
+    setGoalW(formatMoneyInput(2500))
+    setGoalM(formatMoneyInput(10000))
   }
 
   async function saveGoals() {
@@ -176,14 +251,13 @@ export default function DashboardPage() {
     if (goalsSaving) return
     setGoalsSaving(true)
     try {
-      const w = toMoneyNumber(goalW)
-      const m = toMoneyNumber(goalM)
+      const w = parseMoneyInput(goalW)
+      const m = parseMoneyInput(goalM)
       const next = {
         weekly_goal_ap: Number.isFinite(w) && w > 0 ? w : 2500,
         monthly_goal_ap: Number.isFinite(m) && m > 0 ? m : 10000,
       }
 
-      // Try DB upsert first
       try {
         const res = await supabase.from('user_goals').upsert(
           { user_id: me.id, weekly_goal_ap: next.weekly_goal_ap, monthly_goal_ap: next.monthly_goal_ap },
@@ -191,14 +265,17 @@ export default function DashboardPage() {
         )
         if (!res.error) {
           setGoals(next)
+          setGoalW(formatMoneyInput(next.weekly_goal_ap))
+          setGoalM(formatMoneyInput(next.monthly_goal_ap))
           setGoalsOpen(false)
           return
         }
       } catch {}
 
-      // Fallback: local storage
       localStorage.setItem(`flow_goals_${me.id}`, JSON.stringify(next))
       setGoals(next)
+      setGoalW(formatMoneyInput(next.weekly_goal_ap))
+      setGoalM(formatMoneyInput(next.monthly_goal_ap))
       setGoalsOpen(false)
     } finally {
       setGoalsSaving(false)
@@ -206,7 +283,6 @@ export default function DashboardPage() {
   }
 
   async function buildAgencyLeaders(): Promise<LeaderRow[]> {
-    // This month deals (global)
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
@@ -234,7 +310,8 @@ export default function DashboardPage() {
     const ids = top.map((t) => t[0])
     if (!ids.length) return []
 
-    const { data: ps } = await supabase.from('profiles').select('id,first_name,last_name,email').in('id', ids)
+    // ✅ also fetch avatar_url
+    const { data: ps } = await supabase.from('profiles').select('id,first_name,last_name,email,avatar_url').in('id', ids)
 
     const pmap = new Map<string, any>()
     ;(ps || []).forEach((p: any) => pmap.set(p.id, p))
@@ -244,7 +321,7 @@ export default function DashboardPage() {
       const name =
         [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() ||
         (p?.email ? String(p.email).split('@')[0] : '—')
-      return { user_id: uid, name, ap }
+      return { user_id: uid, name, ap, avatar_url: p?.avatar_url || null }
     })
   }
 
@@ -284,11 +361,27 @@ export default function DashboardPage() {
   const weekStart = startOfWeek(now)
   const monthStart = startOfMonth(now)
 
+  // ✅ Date-range filtering (default: month-to-date so behavior matches current)
+  const rangeStartDt = useMemo(() => (rangeStart ? new Date(rangeStart + 'T00:00:00') : monthStart), [rangeStart, monthStart])
+  const rangeEndDt = useMemo(() => {
+    if (!rangeEnd) return now
+    const e = new Date(rangeEnd + 'T23:59:59')
+    return e
+  }, [rangeEnd, now])
+
+  const rangeDeals = useMemo(
+    () => parsed.filter((d) => d.dt >= rangeStartDt && d.dt <= rangeEndDt),
+    [parsed, rangeStartDt, rangeEndDt]
+  )
+
   const todayDeals = useMemo(() => parsed.filter((d) => d.dt >= todayStart), [parsed, todayStart])
   const weekDeals = useMemo(() => parsed.filter((d) => d.dt >= weekStart), [parsed, weekStart])
   const monthDeals = useMemo(() => parsed.filter((d) => d.dt >= monthStart), [parsed, monthStart])
 
-  // ✅ Production (AP) for THIS MONTH (matches the other top stats)
+  // ✅ Production (AP) card rules:
+  // - solo agent: personal only (already enforced by deals query)
+  // - agent with downlines: team (enforced by deals query)
+  // - owner/admin: all (unchanged)
   const production = useMemo(() => sumAP(monthDeals), [monthDeals])
 
   const writingAgents = useMemo(() => {
@@ -298,6 +391,7 @@ export default function DashboardPage() {
 
   const dealsSubmitted = useMemo(() => monthDeals.length, [monthDeals])
 
+  // ✅ Flow trend uses rangeDeals so selector reflects submitted data
   const last7 = useMemo(() => {
     const days: { label: string; count: number }[] = []
     for (let i = 6; i >= 0; i--) {
@@ -307,30 +401,88 @@ export default function DashboardPage() {
       const next = new Date(dStart)
       next.setDate(dStart.getDate() + 1)
 
-      const count = parsed.filter((x) => x.dt >= dStart && x.dt < next).length
+      const count = rangeDeals.filter((x) => x.dt >= dStart && x.dt < next).length
       const label = d.toLocaleDateString(undefined, { weekday: 'short' })
       days.push({ label, count })
     }
     return days
-  }, [parsed])
+  }, [rangeDeals, now])
 
   const lineLabels = useMemo(() => last7.map((x) => x.label), [last7])
   const lineValues = useMemo(() => last7.map((x) => x.count), [last7])
 
+  // ✅ donut uses rangeDeals (selector)
   const carrierDist = useMemo(() => {
     const map = new Map<string, number>()
-    monthDeals.forEach((d) => map.set(d.companySafe, (map.get(d.companySafe) || 0) + 1))
+    rangeDeals.forEach((d) => map.set(d.companySafe, (map.get(d.companySafe) || 0) + 1))
     const entries = Array.from(map.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
     const labels = entries.length ? entries.map((e) => e[0]) : ['No Data']
     const values = entries.length ? entries.map((e) => e[1]) : [100]
     return { labels, values }
-  }, [monthDeals])
+  }, [rangeDeals])
 
   const todayAP = useMemo(() => sumAP(todayDeals), [todayDeals])
   const weekAP = useMemo(() => sumAP(weekDeals), [weekDeals])
   const monthAP = useMemo(() => sumAP(monthDeals), [monthDeals])
+
+  // ✅ Notifications derived from what you already have (deals + goals).
+  // If you add a follow_ups table later, it will plug into this array.
+  const notifications = useMemo<Notif[]>(() => {
+    const list: Notif[] = []
+
+    // recent deals (last 24h)
+    const last24 = parsed.filter((d) => Date.now() - d.dt.getTime() <= 24 * 60 * 60 * 1000)
+    if (last24.length) {
+      list.push({
+        id: 'deals_24h',
+        kind: 'deal',
+        title: `${last24.length} new deal${last24.length === 1 ? '' : 's'} in the last 24h`,
+        body: 'Keep the momentum.',
+        ts: new Date(),
+        href: '/post-deal',
+      })
+    }
+
+    // weekly goal reached
+    if (goals.weekly_goal_ap > 0 && weekAP >= goals.weekly_goal_ap) {
+      list.push({
+        id: 'goal_week',
+        kind: 'goal',
+        title: 'Weekly goal reached 🎯',
+        body: `$${formatMoney(weekAP)} AP / $${formatMoney(goals.weekly_goal_ap)} AP`,
+        ts: new Date(),
+      })
+    }
+
+    // monthly goal reached
+    if (goals.monthly_goal_ap > 0 && monthAP >= goals.monthly_goal_ap) {
+      list.push({
+        id: 'goal_month',
+        kind: 'goal',
+        title: 'Monthly goal reached 🏆',
+        body: `$${formatMoney(monthAP)} AP / $${formatMoney(goals.monthly_goal_ap)} AP`,
+        ts: new Date(),
+      })
+    }
+
+    // placeholder followups (until you wire your followups source)
+    list.push({
+      id: 'followups_stub',
+      kind: 'followup',
+      title: 'Follow-ups',
+      body: 'Connect follow-ups feed (table/API) to show due items here.',
+      ts: new Date(Date.now() - 15 * 60 * 1000),
+    })
+
+    return list
+      .slice()
+      .sort((a, b) => b.ts.getTime() - a.ts.getTime())
+      .slice(0, 8)
+  }, [parsed, goals.weekly_goal_ap, goals.monthly_goal_ap, weekAP, monthAP])
+
+  const notifCount = notifications.length
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
@@ -355,9 +507,9 @@ export default function DashboardPage() {
                 <input
                   className={inputCls}
                   value={goalW}
-                  onChange={(e) => setGoalW(moneyInput(e.target.value))}
-                  onBlur={() => setGoalW(String(toMoneyNumber(goalW) || ''))}
-                  placeholder="2500"
+                  onChange={(e) => setGoalW(moneyInputLocked(e.target.value))}
+                  onBlur={() => setGoalW(formatMoneyInput(parseMoneyInput(goalW)))}
+                  placeholder="2,500.00"
                   inputMode="decimal"
                 />
               </Field>
@@ -366,9 +518,9 @@ export default function DashboardPage() {
                 <input
                   className={inputCls}
                   value={goalM}
-                  onChange={(e) => setGoalM(moneyInput(e.target.value))}
-                  onBlur={() => setGoalM(String(toMoneyNumber(goalM) || ''))}
-                  placeholder="10000"
+                  onChange={(e) => setGoalM(moneyInputLocked(e.target.value))}
+                  onBlur={() => setGoalM(formatMoneyInput(parseMoneyInput(goalM)))}
+                  placeholder="10,000.00"
                   inputMode="decimal"
                 />
               </Field>
@@ -393,9 +545,77 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition">
-              Notifications
+            {/* ✅ Light/Dark toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !darkMode
+                setDarkMode(next)
+                try {
+                  localStorage.setItem('flow_dark', next ? '1' : '0')
+                } catch {}
+                setHtmlDark(next)
+              }}
+              className="glass px-3 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10 inline-flex items-center gap-2"
+              title="Toggle light/dark"
+            >
+              <ModeIcon />
+              {darkMode ? 'Dark' : 'Light'}
             </button>
+
+            {/* ✅ Notifications dropdown (top right) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setNotifOpen((v) => !v)}
+                className="glass px-3 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10 inline-flex items-center gap-2"
+                title="Notifications"
+              >
+                <BellIcon />
+                <span className="hidden sm:inline">Notifications</span>
+                {notifCount > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-[var(--accent)] text-[var(--accentText)] text-[11px] font-bold">
+                    {notifCount}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div className="absolute right-0 mt-2 w-[360px] max-w-[calc(100vw-24px)] z-[300] rounded-2xl border border-white/10 bg-[var(--card)]/95 backdrop-blur-xl shadow-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                    <div className="text-sm font-semibold">Notifications</div>
+                    <button className="text-xs text-white/60 hover:text-white" onClick={() => setNotifOpen(false)}>
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="max-h-[420px] overflow-auto">
+                    {notifications.map((n) => (
+                      <a
+                        key={n.id}
+                        href={n.href || '#'}
+                        onClick={(e) => {
+                          if (!n.href || n.href === '#') e.preventDefault()
+                          setNotifOpen(false)
+                        }}
+                        className="block px-4 py-3 border-b border-white/10 hover:bg-white/5 transition"
+                      >
+                        <div className="flex items-start gap-3">
+                          <NotifDot kind={n.kind} />
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold truncate">{n.title}</div>
+                            {n.body && <div className="text-xs text-white/60 mt-1">{n.body}</div>}
+                            <div className="text-[11px] text-white/45 mt-2">{timeAgo(n.ts)}</div>
+                          </div>
+                        </div>
+                      </a>
+                    ))}
+                    {notifications.length === 0 && <div className="px-4 py-6 text-sm text-white/60">No notifications.</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <a
               href="/post-deal"
               className="px-4 py-2 rounded-xl bg-[var(--accent)] hover:opacity-90 text-sm font-semibold transition"
@@ -409,7 +629,16 @@ export default function DashboardPage() {
         <main className="px-10 pb-12">
           {/* TOP STATS */}
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <MiniStat label="Production (AP)" value={loading ? '—' : `$${formatMoney(production)}`} />
+            <MiniStat
+              label={
+                me?.role === 'admin' || me?.is_agency_owner
+                  ? 'Production (AP)'
+                  : teamIds && teamIds.length > 1
+                  ? 'Team Production (AP)'
+                  : 'My Production (AP)'
+              }
+              value={loading ? '—' : `$${formatMoney(production)}`}
+            />
             <MiniStat label="Writing Agents" value={loading ? '—' : String(writingAgents)} />
             <MiniStat label="Deals Submitted" value={loading ? '—' : String(dealsSubmitted)} />
           </section>
@@ -421,8 +650,9 @@ export default function DashboardPage() {
                 <span className="text-xs text-white/60">Last 7 days</span>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <FlowLineChart labels={lineLabels} values={lineValues} />
+              {/* ✅ Clickable + hover-ready (FlowLineChart patch below supports this) */}
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 cursor-pointer">
+                <FlowLineChart labels={lineLabels} values={lineValues} interactive />
               </div>
 
               <div className="mt-6">
@@ -447,8 +677,79 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* ✅ KPI row — ONE header per card + AP values */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+              {/* ✅ KPI row with sleek date selector on the right */}
+              <div className="flex items-center justify-between mt-6 mb-3">
+                <div className="text-sm font-semibold text-white/80">Production</div>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setDateOpen((v) => !v)}
+                    className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold inline-flex items-center gap-2"
+                    title="Select date range"
+                  >
+                    <CalendarIcon />
+                    <span className="text-white/70">
+                      {rangeStart || toYMD(monthStart)} → {rangeEnd || toYMD(now)}
+                    </span>
+                  </button>
+
+                  {dateOpen && (
+                    <div className="absolute right-0 mt-2 z-[260] w-[340px] rounded-2xl border border-white/10 bg-[var(--card)]/95 backdrop-blur-xl shadow-2xl p-4">
+                      <div className="text-sm font-semibold mb-3">Date Range</div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <div className="text-[11px] text-white/55 mb-2">Start</div>
+                          <input
+                            type="date"
+                            className={inputCls}
+                            value={rangeStart}
+                            onChange={(e) => setRangeStart(e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="text-[11px] text-white/55 mb-2">End</div>
+                          <input
+                            type="date"
+                            className={inputCls}
+                            value={rangeEnd}
+                            onChange={(e) => setRangeEnd(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                          <button
+                            className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
+                            onClick={() => {
+                              const n = new Date()
+                              setRangeStart(toYMD(new Date(n.getFullYear(), n.getMonth(), 1)))
+                              setRangeEnd(toYMD(n))
+                              setDateOpen(false)
+                            }}
+                          >
+                            Month-to-date
+                          </button>
+
+                          <button
+                            className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
+                            onClick={() => setDateOpen(false)}
+                          >
+                            Done
+                          </button>
+                        </div>
+
+                        <div className="text-[11px] text-white/45">
+                          This selector drives the Flow Trend + donut distribution (rangeDeals).
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <KPI title="Today’s Production (AP)" value={loading ? '—' : `$${formatMoney(todayAP)}`} />
                 <KPI title="This Week’s Production (AP)" value={loading ? '—' : `$${formatMoney(weekAP)}`} />
                 <KPI title="This Month’s Production (AP)" value={loading ? '—' : `$${formatMoney(monthAP)}`} />
@@ -464,8 +765,9 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
+              {/* ✅ donut gets same glow / glass effect as goals donuts (CarrierDonut patch below supports glow) */}
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-5">
-                <CarrierDonut labels={carrierDist.labels} values={carrierDist.values} />
+                <CarrierDonut labels={carrierDist.labels} values={carrierDist.values} glow />
               </div>
 
               <div className="space-y-3">
@@ -475,6 +777,7 @@ export default function DashboardPage() {
                     rank={idx + 1}
                     name={l.name}
                     amount={`$${formatMoney(l.ap)}`}
+                    avatar_url={l.avatar_url}
                     highlight={idx === 0}
                   />
                 ))}
@@ -536,11 +839,13 @@ function Leader({
   rank,
   name,
   amount,
+  avatar_url,
   highlight,
 }: {
   rank: number
   name: string
   amount: string
+  avatar_url?: string | null
   highlight?: boolean
 }) {
   return (
@@ -549,35 +854,31 @@ function Leader({
         highlight ? 'bg-white/10' : 'bg-white/5'
       }`}
     >
-      <div className="flex items-center gap-3">
-        <div
-          className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ${
-            highlight ? 'bg-[var(--accent)]' : 'bg-white/10'
-          }`}
-          style={highlight ? ({ color: 'var(--accentText)' } as any) : undefined}
-        >
-          {rank}
+      <div className="flex items-center gap-3 min-w-0">
+        {/* ✅ profile picture */}
+        <div className="w-9 h-9 rounded-2xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center shrink-0">
+          {avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatar_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-xs text-white/60">{(name || 'A').slice(0, 1).toUpperCase()}</span>
+          )}
         </div>
-        <div>
-          <div className={`${highlight ? 'text-base font-semibold' : 'text-sm font-medium'}`}>{name}</div>
+
+        <div className="min-w-0">
+          <div className={`${highlight ? 'text-base font-semibold' : 'text-sm font-medium'} truncate`}>{name}</div>
           <div className="text-xs text-white/50">Monthly production (AP)</div>
         </div>
       </div>
 
-      <div className={`${highlight ? 'text-lg font-semibold' : 'text-sm font-semibold'} text-green-400`}>
-        {amount}
-      </div>
+      <div className={`${highlight ? 'text-lg font-semibold' : 'text-sm font-semibold'} text-green-400`}>{amount}</div>
     </div>
   )
 }
 
 function Row({ head, left, mid, right }: { head?: boolean; left: string; mid: string; right: string }) {
   return (
-    <div
-      className={`grid grid-cols-3 px-4 py-3 border-b border-white/10 ${
-        head ? 'text-xs text-white/60 bg-white/5' : 'text-sm'
-      }`}
-    >
+    <div className={`grid grid-cols-3 px-4 py-3 border-b border-white/10 ${head ? 'text-xs text-white/60 bg-white/5' : 'text-sm'}`}>
       <div>{left}</div>
       <div className="text-center">{mid}</div>
       <div className="text-right">{right}</div>
@@ -586,7 +887,8 @@ function Row({ head, left, mid, right }: { head?: boolean; left: string; mid: st
 }
 
 function timeAgo(d: Date) {
-  const diff = Date.now() - d.getTime()
+  const dt = d instanceof Date ? d : new Date(d)
+  const diff = Date.now() - dt.getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'now'
   if (mins < 60) return `${mins}m`
@@ -611,17 +913,38 @@ function formatMoney(n: number) {
   return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-// typing helpers
-function moneyInput(v: string) {
-  const cleaned = String(v || '').replace(/[^0-9.]/g, '')
-  const parts = cleaned.split('.')
-  if (parts.length <= 1) return cleaned
-  return `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}`
+function toYMD(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
-function toMoneyNumber(v: string) {
-  const num = Number(String(v || '').replace(/[^0-9.]/g, ''))
+/* -------- locked financial inputs (commas + decimals) -------- */
+
+// Allow only digits and one dot, max 2 decimals, but keep commas display-friendly
+function moneyInputLocked(v: string) {
+  const raw = String(v || '').replace(/,/g, '')
+  const cleaned = raw.replace(/[^0-9.]/g, '')
+  const parts = cleaned.split('.')
+  const a = parts[0] || ''
+  const b = (parts[1] || '').slice(0, 2)
+  const joined = parts.length > 1 ? `${a}.${b}` : a
+  // don’t force formatting while typing too aggressively; keep readable
+  return joined
+}
+
+// ✅ CONTINUE FROM: function parseMoneyInput(v: string) {
+
+function parseMoneyInput(v: string) {
+  const num = Number(String(v || '').replace(/,/g, '').replace(/[^0-9.]/g, ''))
   return Number.isFinite(num) ? num : NaN
+}
+
+function formatMoneyInput(n: number) {
+  const num = Number(n || 0)
+  if (!Number.isFinite(num)) return ''
+  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /* ---------------- goals donuts (live color) ---------------- */
@@ -643,13 +966,17 @@ function GoalDonutsLive({
         title="Weekly Goal"
         current={weeklyCurrentAP}
         goal={weeklyGoalAP}
-        subtitle={`${pct(weeklyCurrentAP, weeklyGoalAP)}% • $${formatMoney(weeklyCurrentAP)} / $${formatMoney(weeklyGoalAP)}`}
+        subtitle={`${pct(weeklyCurrentAP, weeklyGoalAP)}% • $${formatMoney(weeklyCurrentAP)} / $${formatMoney(
+          weeklyGoalAP
+        )}`}
       />
       <GoalRing
         title="Monthly Goal"
         current={monthlyCurrentAP}
         goal={monthlyGoalAP}
-        subtitle={`${pct(monthlyCurrentAP, monthlyGoalAP)}% • $${formatMoney(monthlyCurrentAP)} / $${formatMoney(monthlyGoalAP)}`}
+        subtitle={`${pct(monthlyCurrentAP, monthlyGoalAP)}% • $${formatMoney(monthlyCurrentAP)} / $${formatMoney(
+          monthlyGoalAP
+        )}`}
       />
     </div>
   )
@@ -720,10 +1047,117 @@ function pct(current: number, goal: number) {
 
 function ringColor(p: number) {
   // red -> orange -> yellow -> green
-  if (p >= 1) return '#22c55e' // green
-  if (p >= 0.66) return '#facc15' // yellow
-  if (p >= 0.33) return '#fb923c' // orange
-  return '#ef4444' // red
+  if (p >= 1) return '#22c55e'
+  if (p >= 0.66) return '#facc15'
+  if (p >= 0.33) return '#fb923c'
+  return '#ef4444'
+}
+
+/* ---------------- Notifications UI bits ---------------- */
+
+function NotifDot({ kind }: { kind: Notif['kind'] }) {
+  const cls =
+    kind === 'goal'
+      ? 'bg-green-500/30 border-green-400/20'
+      : kind === 'deal'
+      ? 'bg-blue-500/30 border-blue-400/20'
+      : kind === 'followup'
+      ? 'bg-yellow-500/30 border-yellow-400/20'
+      : 'bg-white/10 border-white/10'
+
+  return <span className={`mt-1 w-3 h-3 rounded-full border ${cls}`} />
+}
+
+/* ---------------- Icons ---------------- */
+
+function BellIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M15 17H9"
+        stroke="rgba(255,255,255,0.75)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7Z"
+        stroke="rgba(255,255,255,0.75)"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function CalendarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7 3v3M17 3v3"
+        stroke="rgba(255,255,255,0.75)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4 8h16"
+        stroke="rgba(255,255,255,0.75)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6 6h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2Z"
+        stroke="rgba(255,255,255,0.75)"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function ModeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 3a7 7 0 000 14 7 7 0 007-7"
+        stroke="rgba(255,255,255,0.75)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 3v4h-4"
+        stroke="rgba(255,255,255,0.75)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function GlassEditIcon() {
+  return (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-xl border border-white/10 bg-white/5">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 20h9" stroke="rgba(255,255,255,0.7)" strokeWidth="1.8" strokeLinecap="round" />
+        <path
+          d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"
+          stroke="rgba(255,255,255,0.7)"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  )
+}
+
+/* ---------------- Dark mode (UI-only) ---------------- */
+
+function setHtmlDark(isDark: boolean) {
+  if (typeof document === 'undefined') return
+  const el = document.documentElement
+  if (isDark) el.classList.add('dark')
+  else el.classList.remove('dark')
 }
 
 /* ---------------- UI bits ---------------- */
@@ -737,32 +1171,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function GlassEditIcon() {
-  return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-xl border border-white/10 bg-white/5">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M12 20h9"
-          stroke="rgba(255,255,255,0.7)"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-        <path
-          d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"
-          stroke="rgba(255,255,255,0.7)"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  )
-}
-
 const inputCls =
   'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7'
 
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
+const btnGlass =
+  'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
 
 const saveWide =
   'mt-5 w-full rounded-2xl bg-[var(--accent)] hover:opacity-90 transition px-4 py-3 text-sm font-semibold'
-
