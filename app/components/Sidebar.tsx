@@ -6,6 +6,16 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
+/**
+ * ✅ Per requirements:
+ * - NO invisible sidebar (always visible)
+ * - NO light mode
+ * - Logout hover = red glass
+ * - Large profile icon synced to the user’s profile picture (per account)
+ * - Clean, slightly smaller nav text
+ * - Keep overall format/behavior consistent with your existing sidebar pattern
+ */
+
 const NAV = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Leaderboard', href: '/leaderboard' },
@@ -28,7 +38,6 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
 
-  // ✅ Profile (big + sync)
   const [me, setMe] = useState<Me | null>(null)
 
   useEffect(() => {
@@ -40,7 +49,7 @@ export default function Sidebar() {
         const u = uRes.user
         if (!u) return
 
-        // Try profiles.avatar_url first (if present), fallback to auth metadata
+        // Try profiles.avatar_url first, fallback to auth metadata
         let avatarUrl = ''
         let fullName = ''
         let email = u.email || ''
@@ -103,10 +112,10 @@ export default function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-72 p-6 border-r border-white/10 bg-[#070a12]/92 backdrop-blur-xl">
-      {/* Header */}
+      {/* ✅ Header (profile + brand) */}
       <div className="mb-7 flex items-center gap-4">
-        {/* ✅ BIG profile icon */}
-        <div className="relative h-16 w-16 rounded-full overflow-hidden border border-white/10 bg-white/5">
+        {/* ✅ Large profile icon */}
+        <div className="relative h-20 w-20 rounded-full overflow-hidden border border-white/10 bg-white/5">
           {me?.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -116,24 +125,26 @@ export default function Sidebar() {
               referrerPolicy="no-referrer"
             />
           ) : (
-            <div className="h-full w-full flex items-center justify-center text-lg font-extrabold text-white/80">
+            <div className="h-full w-full flex items-center justify-center text-xl font-extrabold text-white/80">
               {initials}
             </div>
           )}
 
           {/* subtle glow */}
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -inset-8 rounded-full bg-white/5 blur-2xl" />
+            <div className="absolute -inset-10 rounded-full bg-white/5 blur-2xl" />
           </div>
         </div>
 
         <div className="min-w-0">
           <div className="text-lg font-semibold tracking-tight leading-tight">Flow</div>
-          <div className="text-[11px] text-white/55 mt-1 truncate">{me?.name ? me.name : 'Deal tracking'}</div>
+          <div className="text-[11px] text-white/55 mt-1 truncate">
+            {me?.name ? me.name : 'Deal tracking'}
+          </div>
         </div>
       </div>
 
-      {/* Nav */}
+      {/* ✅ Nav */}
       <nav className="flex flex-col gap-1.5">
         {NAV.map((item) => {
           const active = pathname === item.href
@@ -143,8 +154,7 @@ export default function Sidebar() {
               href={item.href}
               className={[
                 'rounded-xl px-4 py-3 transition border flex items-center justify-between',
-                // ✅ slightly smaller category text
-                'text-[13px] font-medium',
+                'text-[12.5px] font-medium', // slightly smaller for a cleaner look
                 active
                   ? 'bg-white/10 border-white/15'
                   : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10',
@@ -165,11 +175,10 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom */}
+      {/* ✅ Bottom: Logout only (no v1, no close button) */}
       <div className="absolute bottom-6 left-6 right-6">
         <div className="h-px bg-white/10 mb-4" />
 
-        {/* ✅ Logout: transparent glass + red hover */}
         <button
           onClick={logout}
           className={[
@@ -179,6 +188,9 @@ export default function Sidebar() {
         >
           Logout
         </button>
+
+        {/* ✅ optional subtle compliance/footer space (no text) */}
+        <div className="mt-3 h-2" />
       </div>
     </aside>
   )
