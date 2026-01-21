@@ -52,7 +52,7 @@ export default function PostDealPage() {
   const [policy_number, setPolicyNumber] = useState('')
 
   // ✅ NEW FIELDS
-  const [referrals_collected, setReferralsCollected] = useState('0') // preset 0
+  const [referrals_collected, setReferralsCollected] = useState('0') // editable any number
   const [source, setSource] = useState<SourceOpt>('Inbound')
 
   // ✅ Confetti overlay
@@ -170,8 +170,8 @@ export default function PostDealPage() {
     const pol = policy_number.trim()
     if (pol && pol.length < 6) return setToast('Policy # must be at least 6 characters')
 
-    // ✅ Referrals collected: numeric, >= 0
-    const refs = Number(String(referrals_collected || '0').replace(/[^0-9]/g, ''))
+    // ✅ Referrals collected: numeric, >= 0 (editable any number)
+    const refs = parseIntInput(referrals_collected)
     if (!Number.isFinite(refs) || refs < 0) return setToast('Referrals collected must be 0 or more')
 
     setSaving(true)
@@ -183,7 +183,6 @@ export default function PostDealPage() {
         return
       }
 
-      // ✅ RLS-safe: set BOTH agent_id and user_id to the logged-in user
       const payload: any = {
         agent_id: uid,
         user_id: uid,
@@ -212,14 +211,13 @@ export default function PostDealPage() {
 
       if (inserted?.id) fireDiscordWebhook(inserted.id)
 
-      // ✅ Confetti burst on success
       triggerConfetti()
 
-      // ✅ route back to dashboard with refreshed data (keep behavior)
+      // ✅ let the confetti play longer before navigating
       setTimeout(() => {
         router.push('/dashboard')
         router.refresh()
-      }, 900)
+      }, 1500)
     } catch (e: any) {
       setToast(e?.message || 'Submit failed')
       setSaving(false)
@@ -230,15 +228,14 @@ export default function PostDealPage() {
   function triggerConfetti() {
     confettiKeyRef.current += 1
     setConfettiOn(true)
-    window.setTimeout(() => setConfettiOn(false), 900)
+    window.setTimeout(() => setConfettiOn(false), 1500)
   }
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
       <Sidebar />
 
-      {/* ✅ Confetti Overlay */}
-      {confettiOn && <ConfettiBurst key={confettiKeyRef.current} />}
+      {confettiOn && <ConfettiBurst key={confettiKeyRef.current} durationMs={1500} />}
 
       {toast && (
         <div className="fixed top-5 right-5 z-50">
@@ -269,18 +266,11 @@ export default function PostDealPage() {
           {loading ? (
             <div className="px-6 py-10 text-center text-white/60">Loading…</div>
           ) : (
-            // ✅ Same behavior, but now we give open space on the right (layout only)
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="max-w-2xl">
-                {/* ✅ Vertical drop-aligned layout */}
                 <div className="space-y-4">
                   <Field label="Client Name">
-                    <input
-                      className={inputCls}
-                      value={full_name}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="Client name"
-                    />
+                    <input className={inputCls} value={full_name} onChange={(e) => setFullName(e.target.value)} placeholder="Client name" />
                   </Field>
 
                   <Field label="Phone">
@@ -341,9 +331,8 @@ export default function PostDealPage() {
                     </select>
                   </Field>
 
-                  {/* ✅ NEW: Source dropdown */}
                   <Field label="Source">
-                    <select className={inputCls} value={source} onChange={(e) => setSource(e.target.value as SourceOpt)}>
+                    <select className={inputCls} value={source} onChange={(e) => setSource(e.target.value as any)}>
                       <option value="Inbound">Inbound</option>
                       <option value="Readymode">Readymode</option>
                       <option value="Referral">Referral</option>
@@ -351,12 +340,11 @@ export default function PostDealPage() {
                     </select>
                   </Field>
 
-                  {/* ✅ NEW: Referrals collected */}
                   <Field label="Referrals Collected">
                     <input
                       className={inputCls}
                       value={referrals_collected}
-                      onChange={(e) => setReferralsCollected(intInput(e.target.value))}
+                      onChange={(e) => setReferralsCollected(editableInt(e.target.value))}
                       placeholder="0"
                       inputMode="numeric"
                     />
@@ -409,55 +397,16 @@ export default function PostDealPage() {
                 </button>
               </div>
 
-              {/* ✅ Open Space on right-hand side (no behavioral changes) */}
+              {/* ✅ Open Space on right-hand side (NO DATA) */}
               <div className="hidden lg:block">
                 <div className="h-full rounded-2xl border border-white/10 bg-white/5 overflow-hidden relative">
                   <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute -top-24 -right-24 w-[420px] h-[420px] rounded-full bg-blue-500/10 blur-3xl" />
                     <div className="absolute -bottom-24 -left-24 w-[420px] h-[420px] rounded-full bg-white/5 blur-3xl" />
                   </div>
-
-                  <div className="relative p-6 h-full flex flex-col justify-between">
-                    <div>
-                      <div className="text-sm font-semibold">Keep it moving.</div>
-                      <div className="mt-2 text-sm text-white/60">
-                        Post the deal clean — then go get another one.
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                      <div className="text-xs text-white/60">Live check</div>
-                      <div className="mt-3 space-y-2 text-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="text-white/60">Carrier</span>
-                          <span className="font-semibold">{company || '—'}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-white/60">Product</span>
-                          <span className="font-semibold">{product_name || '—'}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-white/60">Premium</span>
-                          <span className="font-semibold">{premium ? formatMoneyInput(premium) : '—'}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-white/60">Source</span>
-                          <span className="font-semibold">{source}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-white/60">Referrals</span>
-                          <span className="font-semibold">{referrals_collected || '0'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-[11px] text-white/45">
-                      * Right panel is intentionally open space — keeps the form clean and fast.
-                    </div>
-                  </div>
+                  {/* intentionally empty */}
                 </div>
               </div>
-
             </div>
           )}
         </div>
@@ -483,7 +432,6 @@ function formatPhone(input: string) {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
 }
 
-// keep input money-ish while typing
 function moneyInput(v: string) {
   const cleaned = String(v || '').replace(/[^0-9.]/g, '')
   const parts = cleaned.split('.')
@@ -491,8 +439,17 @@ function moneyInput(v: string) {
   return `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}`
 }
 
-function intInput(v: string) {
-  return String(v || '').replace(/[^0-9]/g, '').slice(0, 4) || '0'
+function editableInt(v: string) {
+  // ✅ fully editable numeric (allows empty while typing)
+  const s = String(v || '').replace(/[^0-9]/g, '')
+  return s
+}
+
+function parseIntInput(v: string) {
+  const s = String(v || '').trim()
+  if (s === '') return 0
+  const n = Number(s.replace(/[^0-9]/g, ''))
+  return Number.isFinite(n) ? n : NaN
 }
 
 function toMoneyNumber(v: string) {
@@ -500,7 +457,6 @@ function toMoneyNumber(v: string) {
   return Number.isFinite(num) ? num : NaN
 }
 
-// format to $X,XXX.XX on blur — NO rounding
 function formatMoneyInput(v: string) {
   const n = toMoneyNumber(v)
   if (!Number.isFinite(n)) return ''
@@ -530,23 +486,21 @@ function buildNote({
   return lines.length ? lines.join(' | ') : null
 }
 
-/* ---------- confetti ---------- */
-
-function ConfettiBurst() {
-  // simple, dependency-free burst (fast + pretty)
+function ConfettiBurst({ durationMs = 1500 }: { durationMs?: number }) {
   const pieces = useMemo(() => {
-    const out: { left: number; delay: number; dur: number; rot: number; size: number }[] = []
-    for (let i = 0; i < 42; i++) {
+    const out: { left: number; delay: number; dur: number; rot: number; size: number; hue: number }[] = []
+    for (let i = 0; i < 54; i++) {
       out.push({
         left: Math.random() * 100,
-        delay: Math.random() * 0.12,
-        dur: 0.7 + Math.random() * 0.45,
+        delay: Math.random() * 0.18,
+        dur: durationMs / 1000 - 0.15 + Math.random() * 0.5,
         rot: Math.random() * 360,
-        size: 6 + Math.random() * 10,
+        size: 6 + Math.random() * 11,
+        hue: Math.floor(Math.random() * 360),
       })
     }
     return out
-  }, [])
+  }, [durationMs])
 
   return (
     <div className="fixed inset-0 z-[9999] pointer-events-none overflow-hidden">
@@ -558,7 +512,7 @@ function ConfettiBurst() {
             left: `${p.left}%`,
             width: `${p.size}px`,
             height: `${Math.max(6, p.size * 0.6)}px`,
-            background: `hsla(${Math.floor(Math.random() * 360)}, 90%, 60%, 0.95)`,
+            background: `hsla(${p.hue}, 90%, 60%, 0.95)`,
             transform: `rotate(${p.rot}deg)`,
             animation: `confettiFall ${p.dur}s ease-out ${p.delay}s forwards`,
           }}
