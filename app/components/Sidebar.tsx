@@ -165,8 +165,8 @@ export default function Sidebar() {
         </div>
 
         <div className="min-w-0">
+           <div className="text-lg font-semibold tracking-tight leading-tight">{me?.name ? me.name : 'Deal tracking'}</div>
           <div className="text-lg font-semibold tracking-tight leading-tight">Flow</div>
-          <div className="text-[11px] text-white/55 mt-1 truncate">{me?.name ? me.name : 'Deal tracking'}</div>
         </div>
       </div>
 
