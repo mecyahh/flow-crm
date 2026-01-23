@@ -154,38 +154,4 @@ export default function CarrierDonut({
           {top.pct}%
         </div>
 
-        {/* rank badges */}
-        <div className="mt-3 flex items-center gap-2">
-          {safeLabels.map((lab, i) => {
-            const rank = i + 1
-            const isTop = i === top.idx
-            const tone =
-              rank === 1
-                ? 'border-white/15 bg-white/10'
-                : rank === 2
-                ? 'border-white/12 bg-white/7'
-                : 'border-white/10 bg-white/5'
-
-            const pulse = rank === 1 ? 'pulse-strong' : 'pulse-soft'
-
-            return (
-              <div
-                key={lab + i}
-                className={[
-                  'px-2.5 py-1 rounded-xl border text-[10px] font-bold tracking-tight',
-                  tone,
-                  isTop ? pulse : '',
-                ].join(' ')}
-                style={{
-                  color: isTop ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.70)',
-                }}
-              >
-                #{rank}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
+        {/** removed rank badges */}
