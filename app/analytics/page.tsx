@@ -301,10 +301,11 @@ export default function AnalyticsPage() {
     return list
   }, [agents, perAgent])
 
-  // Top Carrier
+    // Top Carrier
   const topCarrier = useMemo(() => {
     const m = new Map<string, number>()
-        parsed.forEach((d) => m.set(d.companySafe, (m.get(d.companySafe) || 0) + d.apNum))
+    parsed.forEach((d) => m.set(d.companySafe, (m.get(d.companySafe) || 0) + d.premiumNum))
+
     let best = '—'
     let bestVal = 0
     for (const [k, v] of m.entries()) {
@@ -336,7 +337,7 @@ export default function AnalyticsPage() {
     parsed.forEach((d) => {
       const k = toISODateLocal(d.dt)
       const i = idx.get(k)
-            if (i !== undefined) out[i].ap += d.apNum
+      if (i !== undefined) out[i].ap += d.premiumNum
     })
 
     return out
@@ -351,12 +352,12 @@ export default function AnalyticsPage() {
       const k = d.companySafe
       if (!m.has(k)) m.set(k, { carrier: k, ap: 0, deals: 0 })
       const r = m.get(k)!
-            r.ap += d.apNum
+      r.ap += d.premiumNum
       r.deals += 1
     })
     return Array.from(m.values()).sort((a, b) => b.ap - a.ap)
   }, [parsed])
-
+  
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
