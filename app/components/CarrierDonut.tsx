@@ -1,7 +1,7 @@
 // ✅ REPLACE ENTIRE FILE: /app/components/CarrierDonut.tsx
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Chart as ChartJS, ArcElement, Tooltip } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
 
@@ -22,18 +22,57 @@ export default function CarrierDonut({
   const safeValues = values.length ? values : [100]
 
   const top = useMemo(() => {
-    let max = -Infinity
-    let idx = 0
-    safeValues.forEach((v, i) => {
-      if (v > max) {
-        max = v
-        idx = i
-      }
-    })
-    const total = safeValues.reduce((a, b) => a + b, 0) || 1
-    const pct = Math.round((safeValues[idx] / total) * 100)
-    return { name: safeLabels[idx], pct }
-  }, [safeLabels, safeValues])
+  const total = safeValues.reduce((a, b) => a + b, 0) || 1
+
+  // sort indices by value desc
+  const indices = safeValues
+    .map((v, i) => ({ v: Number(v || 0), i }))
+    .sort((a, b) => b.v - a.v)
+    .map((x) => x.i)
+
+  const topIdx = indices[0] ?? 0
+  const topVal = safeValues[topIdx] ?? 0
+  const pct = Math.round((Number(topVal || 0) / total) * 100)
+
+  const color = palette[topIdx % palette.length]
+
+  const top3 = indices.slice(0, 3).map((i) => {
+    const v = Number(safeValues[i] || 0)
+    const p = Math.round((v / total) * 100)
+    return {
+      idx: i,
+      name: safeLabels[i] ?? '—',
+      value: v,
+      pct: p,
+      color: palette[i % palette.length],
+    }
+  })
+
+  return { name: safeLabels[topIdx] ?? '—', pct, color, top3 }
+}, [safeLabels, safeValues, palette])
+
+  const [pctAnim, setPctAnim] = useState(0)
+
+useEffect(() => {
+  const target = Number(top.pct || 0)
+  const from = pctAnim
+  const start = performance.now()
+  const dur = 650 // ms
+
+  let raf = 0
+  const tick = (t: number) => {
+    const p = Math.min(1, (t - start) / dur)
+    // easeOutCubic
+    const eased = 1 - Math.pow(1 - p, 3)
+    const next = Math.round(from + (target - from) * eased)
+    setPctAnim(next)
+    if (p < 1) raf = requestAnimationFrame(tick)
+  }
+
+  raf = requestAnimationFrame(tick)
+  return () => cancelAnimationFrame(raf)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [top.pct])
 
   // ✅ Default palette = your requested colors (in order)
 // Kelly green, Fuchsia, Red, Orange, Blue, Teal
@@ -105,10 +144,44 @@ const palette = (colors && colors.length ? colors : defaultPalette).slice()
   return (
     <div className="h-56 w-full relative">
       <Doughnut data={data} options={options} plugins={glow ? [glowPlugin] : undefined} />
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <div className="text-xs text-white/60">Top Carrier</div>
-        <div className="text-lg font-semibold">{top.name}</div>
-        <div className="text-xs font-semibold text-blue-300 mt-1">{top.pct}%</div>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-4">
+  <div className="text-xs text-white/60">Top Carrier</div>
+
+  <div className="text-lg font-semibold text-center truncate max-w-[260px]">
+    {top.name}
+  </div>
+
+  {/* ✅ animated % that matches top slice color */}
+  <div className="text-xs font-semibold mt-1" style={{ color: top.color }}>
+    {pctAnim}%
+  </div>
+
+  {/* ✅ rank badges (top 3) */}
+  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+    {top.top3.map((x, idx) => (
+      <div
+        key={`${x.name}_${idx}`}
+        className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 backdrop-blur px-2.5 py-1"
+        style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}
+      >
+        <span
+          className="text-[10px] font-extrabold rounded-lg px-1.5 py-0.5"
+          style={{ background: x.color, color: 'rgba(0,0,0,0.85)' }}
+        >
+          #{idx + 1}
+        </span>
+
+        <span className="text-[11px] font-semibold text-white/85 max-w-[120px] truncate">
+          {x.name}
+        </span>
+
+        <span className="text-[11px] font-semibold" style={{ color: x.color }}>
+          {x.pct}%
+        </span>
+      </div>
+    ))}
+  </div>
+</div>
       </div>
     </div>
   )
