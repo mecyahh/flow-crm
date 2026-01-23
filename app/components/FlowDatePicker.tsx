@@ -1,693 +1,276 @@
-// ✅ REPLACE ENTIRE FILE: /app/post-deal/page.tsx
+// ✅ REPLACE ENTIRE FILE: /app/components/FlowDatePicker.tsx
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Sidebar from '../components/Sidebar'
-import { supabase } from '@/lib/supabaseClient'
-import FlowDatePicker from '@/app/components/FlowDatePicker'
-
-type CarrierRow = {
-  id: string
-  name: string
-  supported_name: string | null
-  active: boolean | null
-  sort_order: number | null
-}
-
-type ProductRow = {
-  id: string
-  carrier_id: string
-  product_name: string
-  sort_order: number | null
-  is_active: boolean | null
-}
-
-type SourceOpt = 'Inbound' | 'Readymode' | 'Referral' | 'Warm-Market'
-
-export default function PostDealPage() {
-  const router = useRouter()
-
-  const [toast, setToast] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-
-  const [carriers, setCarriers] = useState<CarrierRow[]>([])
-  const [products, setProducts] = useState<ProductRow[]>([])
-
-  // Form (LOCKED FIELDS)
-  const [full_name, setFullName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [dob, setDob] = useState('') // YYYY-MM-DD
-  const [effective_date, setEffectiveDate] = useState('') // YYYY-MM-DD
-
-  // ✅ Typeable (MM/DD/YYYY) in addition to FlowDatePicker
-  const [dobText, setDobText] = useState('') // MM/DD/YYYY
-  const [effText, setEffText] = useState('') // MM/DD/YYYY
-
-  const [carrier_id, setCarrierId] = useState('')
-  const [company, setCompany] = useState('') // deals.company
-  const [product_name, setProductName] = useState('')
-
-  const [coverage, setCoverage] = useState('')
-  const [premium, setPremium] = useState('')
-  const [policy_number, setPolicyNumber] = useState('')
-
-  // ✅ NEW FIELDS
-  const [referrals_collected, setReferralsCollected] = useState('0') // editable any number
-  const [source, setSource] = useState<SourceOpt>('Inbound')
-
-  // ✅ Confetti overlay (MORE)
-  const [confettiOn, setConfettiOn] = useState(false)
-  const confettiKeyRef = useRef(0)
-
-  useEffect(() => {
-    boot()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (!carrier_id) {
-      setProducts([])
-      setProductName('')
-      return
-    }
-    loadProducts(carrier_id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carrier_id])
-
-  // ✅ Keep typeable text synced from ISO values
-  useEffect(() => {
-    setDobText(dob ? isoToMDY(dob) : '')
-  }, [dob])
-
-  useEffect(() => {
-    setEffText(effective_date ? isoToMDY(effective_date) : '')
-  }, [effective_date])
-
-  async function boot() {
-    setLoading(true)
-
-    const { data: u } = await supabase.auth.getUser()
-    const uid = u.user?.id
-    if (!uid) {
-      window.location.href = '/login'
-      return
-    }
-
-    const { data, error } = await supabase
-      .from('carriers')
-      .select('id,name,supported_name,active,sort_order')
-      .order('sort_order', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: true })
-      .limit(5000)
-
-    if (error) {
-      setToast(`Could not load carriers: ${error.message}`)
-      setCarriers([])
-      setLoading(false)
-      return
-    }
-
-    const activeOnly = ((data || []) as CarrierRow[]).filter((c) => c.active !== false)
-    setCarriers(activeOnly)
-    setLoading(false)
-  }
-
-  async function loadProducts(cid: string) {
-    const { data, error } = await supabase
-      .from('carrier_products')
-      .select('id,carrier_id,product_name,sort_order,is_active')
-      .eq('carrier_id', cid)
-      .order('sort_order', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: true })
-      .limit(5000)
-
-    if (error) {
-      setToast(`Could not load products: ${error.message}`)
-      setProducts([])
-      return
-    }
-
-    const activeOnly = ((data || []) as ProductRow[]).filter((p) => p.is_active !== false)
-    setProducts(activeOnly)
-  }
-
-  const carrierOptions = useMemo(() => {
-    return carriers.map((c) => ({
-      id: c.id,
-      label: c.name,
-      supported_name: c.supported_name || c.name,
-    }))
-  }, [carriers])
-
-  const productOptions = useMemo(() => {
-    return products.map((p) => ({
-      id: p.id,
-      label: p.product_name,
-    }))
-  }, [products])
-
-  async function fireDiscordWebhook(dealId: string) {
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token
-    if (!token) return
-
-    await fetch('/api/webhooks/deal-posted', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ deal_id: dealId }),
-    }).catch(() => {})
-  }
-
-  async function submit() {
-    if (saving) return
-    setToast(null)
-
-    const nameClean = full_name.trim()
-    if (!nameClean) return setToast('Client name is required')
-
-    if (!company.trim()) return setToast('Select a carrier')
-    if (!product_name.trim()) return setToast('Select a product')
-
-    const premNum = toMoneyNumber(premium)
-    if (!Number.isFinite(premNum) || premNum <= 0) return setToast('Premium is required')
-
-    const covNum = coverage ? toMoneyNumber(coverage) : null
-    if (coverage && (!Number.isFinite(covNum as any) || (covNum as any) <= 0))
-      return setToast('Coverage must be a valid number')
-
-    // ✅ Policy number lock: at least 6 chars (if provided)
-    const pol = policy_number.trim()
-    if (pol && pol.length < 6) return setToast('Policy # must be at least 6 characters')
-
-    // ✅ Referrals collected: numeric, >= 0 (editable any number)
-    const refs = parseIntInput(referrals_collected)
-    if (!Number.isFinite(refs) || refs < 0) return setToast('Referrals collected must be 0 or more')
-
-    // ✅ Phone uniqueness lock (prevent double-entry)
-    const phoneDigits = normalizePhoneDigits(phone)
-    if (phoneDigits && phoneDigits.length !== 10) return setToast('Phone must be 10 digits')
-    if (phoneDigits && phoneDigits.length === 10) {
-      const dup = await phoneAlreadyUsed(phoneDigits, phone)
-      if (dup) return setToast('That phone number is already in the system. This client is locked.')
-    }
-
-    setSaving(true)
-    try {
-      const { data: u } = await supabase.auth.getUser()
-      const uid = u.user?.id
-      if (!uid) {
-        window.location.href = '/login'
-        return
-      }
-
-      const payload: any = {
-        agent_id: uid,
-        user_id: uid,
-
-        full_name: nameClean,
-        // store normalized digits to enforce uniqueness going forward
-        phone: phoneDigits ? phoneDigits : null,
-        dob: dob || null,
-        company: company.trim(),
-        policy_number: pol || null,
-        coverage: covNum,
-        premium: premNum,
-
-        status: 'submitted',
-
-        // ✅ store extra fields without new columns
-        // ✅ formatted so Discord line 2 is ALWAYS correct:
-        // product + source + referrals (effective is included but stripped by webhook)
-        note: buildNote({
-          product_name,
-          effective_date,
-          referrals_collected: refs,
-          source,
-        }),
-      }
-
-      const { data: inserted, error } = await supabase.from('deals').insert(payload).select('id').single()
-      if (error) throw new Error(error.message)
-
-      if (inserted?.id) fireDiscordWebhook(inserted.id)
-
-      triggerConfetti()
-
-      // ✅ let the confetti play longer before navigating
-      setTimeout(() => {
-        router.push('/dashboard')
-        router.refresh()
-      }, 1800)
-    } catch (e: any) {
-      setToast(e?.message || 'Submit failed')
-      setSaving(false)
-      return
-    }
-  }
-
-  async function phoneAlreadyUsed(phoneDigits: string, formatted: string) {
-    // check both normalized + formatted to catch older rows
-    // (older rows may have been stored as "(888) 888-8888")
-    const formattedClean = String(formatted || '').trim()
-    const { data, error } = await supabase
-      .from('deals')
-      .select('id')
-      .or(`phone.eq.${escapeOr(phoneDigits)},phone.eq.${escapeOr(formattedClean)}`)
-      .limit(1)
-
-    if (error) return false // don’t block if query fails
-    return !!(data && data.length > 0)
-  }
-
-  function escapeOr(v: string) {
-    // very small safety for `.or()` string
-    return String(v || '').replace(/,/g, '').replace(/\)/g, '').replace(/\(/g, '').replace(/"/g, '')
-  }
-
-  function triggerConfetti() {
-    confettiKeyRef.current += 1
-    setConfettiOn(true)
-    window.setTimeout(() => setConfettiOn(false), 2600)
-  }
-
-  return (
-    <div className="min-h-screen bg-[#0b0f1a] text-white">
-      <Sidebar />
-
-      {confettiOn && <ConfettiBurst key={confettiKeyRef.current} durationMs={2600} />}
-
-      {toast && (
-        <div className="fixed top-5 right-5 z-50">
-          <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
-            <div className="text-sm font-semibold">{toast}</div>
-            <div className="mt-3 flex gap-2">
-              <button className={btnSoft} onClick={() => setToast(null)}>
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="ml-64 px-10 py-10">
-        <div className="mb-8 flex items-end justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Post a Deal</h1>
-            <p className="text-sm text-white/60 mt-1">Great Job ! Once You Post Your Deal, Go Get Another One!</p>
-          </div>
-
-          <button onClick={() => router.push('/dashboard')} className={btnGlass}>
-            Back to Dashboard
-          </button>
-        </div>
-
-        <div className="glass rounded-2xl border border-white/10 p-6">
-          {loading ? (
-            <div className="px-6 py-10 text-center text-white/60">Loading…</div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="max-w-2xl">
-                <div className="space-y-4">
-                  <Field label="Client Name">
-                    <input className={inputCls} value={full_name} onChange={(e) => setFullName(e.target.value)} placeholder="Client name" />
-                  </Field>
-
-                  <Field label="Phone (locked — cannot be re-used)">
-                    <input
-                      className={inputCls}
-                      value={phone}
-                      onChange={(e) => setPhone(formatPhone(e.target.value))}
-                      placeholder="(888) 888-8888"
-                      inputMode="tel"
-                    />
-                    <div className="mt-2 text-[11px] text-white/45">Once posted, this phone cannot be submitted again.</div>
-                  </Field>
-
-                  {/* ✅ DOB + Effective now have TYPEABLE MM/DD/YYYY + FlowDatePicker */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label="DOB">
-                      <div className="space-y-2">
-                        <input
-                          className={inputCls}
-                          value={dobText}
-                          onChange={(e) => setDobText(lockMDY(e.target.value))}
-                          onBlur={() => {
-                            if (!dobText.trim()) return setDob('')
-                            const iso = mdyToISO(dobText)
-                            if (!iso) return setToast('DOB must be MM/DD/YYYY')
-                            setDob(iso)
-                          }}
-                          placeholder="MM/DD/YYYY"
-                          inputMode="numeric"
-                        />
-                        <FlowDatePicker
-                          value={dob}
-                          onChange={(v) => {
-                            setDob(v)
-                            setDobText(v ? isoToMDY(v) : '')
-                          }}
-                          placeholder="Select DOB"
-                        />
-                      </div>
-                    </Field>
-
-                    <Field label="Effective Date">
-                      <div className="space-y-2">
-                        <input
-                          className={inputCls}
-                          value={effText}
-                          onChange={(e) => setEffText(lockMDY(e.target.value))}
-                          onBlur={() => {
-                            if (!effText.trim()) return setEffectiveDate('')
-                            const iso = mdyToISO(effText)
-                            if (!iso) return setToast('Effective Date must be MM/DD/YYYY')
-                            setEffectiveDate(iso)
-                          }}
-                          placeholder="MM/DD/YYYY"
-                          inputMode="numeric"
-                        />
-                        <FlowDatePicker
-                          value={effective_date}
-                          onChange={(v) => {
-                            setEffectiveDate(v)
-                            setEffText(v ? isoToMDY(v) : '')
-                          }}
-                          placeholder="Select Effective Date"
-                        />
-                      </div>
-                    </Field>
-                  </div>
-
-                  <Field label="Carrier">
-                    <select
-                      className={selectCls}
-                      value={carrier_id}
-                      onChange={(e) => {
-                        const cid = e.target.value
-                        setCarrierId(cid)
-
-                        const picked = carrierOptions.find((x) => x.id === cid)
-                        const carrierName = picked?.label || ''
-                        setCompany(carrierName)
-                      }}
-                    >
-                      <option value="">Select carrier…</option>
-                      {carrierOptions.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Product">
-                    <select
-                      className={[selectCls, !carrier_id ? 'opacity-50 cursor-not-allowed' : ''].join(' ')}
-                      value={product_name}
-                      onChange={(e) => setProductName(e.target.value)}
-                      disabled={!carrier_id}
-                    >
-                      <option value="">{carrier_id ? 'Select product…' : 'Select carrier first…'}</option>
-                      {productOptions.map((p) => (
-                        <option key={p.id} value={p.label}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Source">
-                    <select className={selectCls} value={source} onChange={(e) => setSource(e.target.value as any)}>
-                      <option value="Inbound">Inbound</option>
-                      <option value="Readymode">Readymode</option>
-                      <option value="Referral">Referral</option>
-                      <option value="Warm-Market">Warm-Market</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Referrals Collected">
-                    <input
-                      className={inputCls}
-                      value={referrals_collected}
-                      onChange={(e) => setReferralsCollected(editableInt(e.target.value))}
-                      placeholder="0"
-                      inputMode="numeric"
-                    />
-                  </Field>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label="Coverage">
-                      <input
-                        className={inputCls}
-                        value={coverage}
-                        onChange={(e) => setCoverage(moneyInput(e.target.value))}
-                        onBlur={() => setCoverage(formatMoneyInput(coverage))}
-                        placeholder="$100,000"
-                        inputMode="decimal"
-                      />
-                    </Field>
-
-                    <Field label="Premium">
-                      <input
-                        className={inputCls}
-                        value={premium}
-                        onChange={(e) => setPremium(moneyInput(e.target.value))}
-                        onBlur={() => setPremium(formatMoneyInput(premium))}
-                        placeholder="$100"
-                        inputMode="decimal"
-                      />
-                    </Field>
-                  </div>
-
-                  <Field label="Policy #">
-                    <input
-                      className={inputCls}
-                      value={policy_number}
-                      onChange={(e) => setPolicyNumber(e.target.value)}
-                      placeholder="Policy number (min 6 chars)"
-                    />
-                    <div className="mt-2 text-[11px] text-white/45">Must be 6+ characters to submit.</div>
-                  </Field>
-                </div>
-
-                <button
-                  onClick={submit}
-                  disabled={saving}
-                  className={[
-                    'mt-6 w-full rounded-2xl transition px-4 py-3 text-sm font-semibold',
-                    saving ? 'bg-white/10 border border-white/10 text-white/60 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500',
-                  ].join(' ')}
-                >
-                  {saving ? 'Submitting…' : 'Submit Deal'}
-                </button>
-              </div>
-
-              {/* ✅ Open Space on right-hand side (NO DATA) */}
-              <div className="hidden lg:block">
-                <div className="h-full rounded-2xl border border-white/10 bg-white/5 overflow-hidden relative">
-                  <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute -top-24 -right-24 w-[420px] h-[420px] rounded-full bg-blue-500/10 blur-3xl" />
-                    <div className="absolute -bottom-24 -left-24 w-[420px] h-[420px] rounded-full bg-white/5 blur-3xl" />
-                  </div>
-                  {/* intentionally empty */}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[11px] text-white/55 mb-2">{label}</div>
-      {children}
-    </div>
-  )
-}
-
-function normalizePhoneDigits(input: string) {
-  return String(input || '').replace(/\D/g, '').slice(0, 10)
-}
-
-function formatPhone(input: string) {
-  const digits = normalizePhoneDigits(input)
-  if (digits.length === 0) return ''
-  if (digits.length < 4) return `(${digits}`
-  if (digits.length < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
-}
-
-function moneyInput(v: string) {
-  const cleaned = String(v || '').replace(/[^0-9.]/g, '')
-  const parts = cleaned.split('.')
-  if (parts.length <= 1) return cleaned
-  return `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}`
-}
-
-function editableInt(v: string) {
-  const s = String(v || '').replace(/[^0-9]/g, '')
-  return s
-}
-
-function parseIntInput(v: string) {
-  const s = String(v || '').trim()
-  if (s === '') return 0
-  const n = Number(s.replace(/[^0-9]/g, ''))
-  return Number.isFinite(n) ? n : NaN
-}
-
-function toMoneyNumber(v: string) {
-  const num = Number(String(v || '').replace(/[^0-9.]/g, ''))
-  return Number.isFinite(num) ? num : NaN
-}
-
-function formatMoneyInput(v: string) {
-  const n = toMoneyNumber(v)
-  if (!Number.isFinite(n)) return ''
-
-  return `$${Number(n).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-/* ---------- Typeable dates (MM/DD/YYYY) <-> ISO (YYYY-MM-DD) ---------- */
-
-function lockMDY(v: string) {
-  // allow only digits + slash, auto-insert slashes as user types
-  const digits = String(v || '').replace(/[^\d]/g, '').slice(0, 8) // MMDDYYYY
-  const mm = digits.slice(0, 2)
-  const dd = digits.slice(2, 4)
-  const yy = digits.slice(4, 8)
-  let out = mm
-  if (dd) out += '/' + dd
-  if (yy) out += '/' + yy
-  return out
-}
-
-function mdyToISO(mdy: string) {
-  const m = String(mdy || '').trim()
-  const parts = m.split('/')
-  if (parts.length !== 3) return null
-  const mm = Number(parts[0])
-  const dd = Number(parts[1])
-  const yyyy = Number(parts[2])
-  if (!Number.isFinite(mm) || !Number.isFinite(dd) || !Number.isFinite(yyyy)) return null
-  if (yyyy < 1900 || yyyy > 2100) return null
-  if (mm < 1 || mm > 12) return null
-  if (dd < 1 || dd > 31) return null
-  const dt = new Date(yyyy, mm - 1, dd)
-  // validate real date (e.g. 02/31)
-  if (dt.getFullYear() !== yyyy || dt.getMonth() !== mm - 1 || dt.getDate() !== dd) return null
-  const y = String(yyyy)
-  const mo = String(mm).padStart(2, '0')
-  const da = String(dd).padStart(2, '0')
-  return `${y}-${mo}-${da}`
-}
-
-function isoToMDY(iso: string) {
-  const s = String(iso || '').trim()
-  const [y, m, d] = s.split('-').map((x) => Number(x))
-  if (!y || !m || !d) return ''
-  return `${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}/${String(y).padStart(4, '0')}`
-}
-
-function buildNote({
-  product_name,
-  effective_date,
-  referrals_collected,
-  source,
+import { createPortal } from 'react-dom'
+
+export default function FlowDatePicker({
+  value,
+  onChange,
+  placeholder = 'Select date',
+  minYear = 1900,
+  maxYear,
 }: {
-  product_name: string
-  effective_date: string
-  referrals_collected: number
-  source: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  minYear?: number
+  maxYear?: number
 }) {
-  // ✅ This is the key to making ALL Discord posts consistent:
-  // webhook reads product from `product_name:` or `Product:`
-  // and strips `Effective:` but leaves Source/Referrals in the same line.
-  const parts: string[] = []
-  const core = [
-    `product_name: ${product_name}`.trim(),
-    `Source: ${source}`.trim(),
-    `Referrals: ${referrals_collected}`.trim(),
-  ]
-    .filter(Boolean)
-    .join(' | ')
+  const [open, setOpen] = useState(false)
+  const anchorRef = useRef<HTMLDivElement | null>(null)
+  const popRef = useRef<HTMLDivElement | null>(null)
 
-  parts.push(core)
-  if (effective_date) parts.push(`Effective: ${effective_date}`)
-  return parts.join(' | ')
+  const computedMaxYear = maxYear ?? new Date().getFullYear() + 5
+
+  const initial = useMemo(() => (value ? parseISO(value) : new Date()), [value])
+  const [viewYear, setViewYear] = useState(initial.getFullYear())
+  const [viewMonth, setViewMonth] = useState(initial.getMonth())
+
+  // position
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+
+  // years
+  const years = useMemo(() => {
+    const out: number[] = []
+    for (let y = computedMaxYear; y >= minYear; y--) out.push(y)
+    return out
+  }, [computedMaxYear, minYear])
+
+  // Sync view to selected value whenever opened
+  useEffect(() => {
+    if (!open) return
+    const d = value ? parseISO(value) : new Date()
+    setViewYear(d.getFullYear())
+    setViewMonth(d.getMonth())
+  }, [open, value])
+
+  // Place popover (viewport positioning)
+  useEffect(() => {
+    if (!open) return
+
+    function place() {
+      const a = anchorRef.current
+      if (!a) return
+      const r = a.getBoundingClientRect()
+
+      const width = 320
+      const height = 360
+      const gap = 8
+
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+
+      // prefer below; if not enough room, place above
+      let top = r.bottom + gap
+      if (top + height > vh && r.top - gap - height > 0) top = r.top - gap - height
+
+      let left = r.left
+      if (left + width > vw - 8) left = vw - width - 8
+      if (left < 8) left = 8
+
+      setPos({ top, left })
+    }
+
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open])
+
+  // Close on outside click (works with portal)
+  useEffect(() => {
+    function onDocDown(e: MouseEvent) {
+      if (!open) return
+      const t = e.target as Node
+      if (anchorRef.current?.contains(t)) return
+      if (popRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocDown)
+    return () => document.removeEventListener('mousedown', onDocDown)
+  }, [open])
+
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  })
+
+  const grid = buildMonthGrid(viewYear, viewMonth)
+
+  const popover = open ? (
+    <div
+      ref={popRef}
+      // ✅ PORTAL + HUGE Z: guaranteed on top of Analytics UI
+      className="fixed z-[2147483647] w-[320px] rounded-2xl border border-white/10 bg-[#0b0f1a]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+      style={{ top: pos.top, left: pos.left }}
+    >
+      <div className="px-4 py-3 flex items-center justify-between border-b border-white/10">
+        <button
+          type="button"
+          onClick={() => {
+            const d = new Date(viewYear, viewMonth, 1)
+            d.setMonth(d.getMonth() - 1)
+            setViewYear(d.getFullYear())
+            setViewMonth(d.getMonth())
+          }}
+          className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition"
+          aria-label="Previous month"
+        >
+          ‹
+        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-semibold">{monthLabel}</div>
+
+          <select
+            className="rounded-xl border border-white/10 bg-white/5 px-2 py-1 text-xs outline-none hover:bg-white/10 transition"
+            value={viewYear}
+            onChange={(e) => setViewYear(Number(e.target.value))}
+            aria-label="Select year"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const d = new Date(viewYear, viewMonth, 1)
+            d.setMonth(d.getMonth() + 1)
+            setViewYear(d.getFullYear())
+            setViewMonth(d.getMonth())
+          }}
+          className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition"
+          aria-label="Next month"
+        >
+          ›
+        </button>
+      </div>
+
+      <div className="px-4 py-3">
+        <div className="grid grid-cols-7 gap-1 text-[11px] text-white/50 mb-2">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
+            <div key={d} className="text-center">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {grid.flat().map((cell, i) => {
+            const iso = toISO(cell.date)
+            const isSelected = value === iso
+            const isThisMonth = cell.inMonth
+            const isToday = iso === toISO(new Date())
+
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  onChange(iso)
+                  setOpen(false)
+                }}
+                className={[
+                  'h-10 rounded-xl text-sm transition border',
+                  isSelected
+                    ? 'bg-blue-600 border-blue-500/60 text-white'
+                    : 'bg-white/5 border-white/10 hover:bg-white/10',
+                  !isThisMonth ? 'text-white/30' : 'text-white',
+                  isToday && !isSelected ? 'ring-1 ring-white/15' : '',
+                ].join(' ')}
+              >
+                {cell.date.getDate()}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              onChange(toISO(new Date()))
+              setOpen(false)
+            }}
+            className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onChange('')
+              setOpen(false)
+            }}
+            className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
+  return (
+    <div className="relative" ref={anchorRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        className="w-full text-left rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none hover:bg-white/7 transition flex items-center justify-between"
+      >
+        <span className={value ? 'text-white' : 'text-white/50'}>
+          {value ? pretty(value) : placeholder}
+        </span>
+        <span className="text-white/50">📅</span>
+      </button>
+
+      {/* ✅ Render calendar into document.body so it never goes behind analytics UI */}
+      {typeof document !== 'undefined' && popover ? createPortal(popover, document.body) : null}
+    </div>
+  )
 }
 
-function ConfettiBurst({ durationMs = 2600 }: { durationMs?: number }) {
-  const pieces = useMemo(() => {
-    const out: { left: number; delay: number; dur: number; rot: number; size: number; hue: number; drift: number }[] = []
-    const COUNT = 240 // ✅ MORE confetti
-    for (let i = 0; i < COUNT; i++) {
-      out.push({
-        left: Math.random() * 100,
-        delay: Math.random() * 0.25,
-        dur: durationMs / 1000 - 0.2 + Math.random() * 0.9,
-        rot: Math.random() * 360,
-        size: 6 + Math.random() * 14,
-        hue: Math.floor(Math.random() * 360),
-        drift: (Math.random() - 0.5) * 140, // left/right drift
-      })
-    }
-    return out
-  }, [durationMs])
+function buildMonthGrid(year: number, month: number) {
+  const first = new Date(year, month, 1)
+  const startDowMon0 = (first.getDay() + 6) % 7
+  const start = new Date(year, month, 1 - startDowMon0)
 
-  return (
-    <div className="fixed inset-0 z-[9999] pointer-events-none overflow-hidden">
-      {pieces.map((p, i) => (
-        <span
-          key={i}
-          className="absolute top-[-16px] rounded-sm opacity-95"
-          style={{
-            left: `${p.left}%`,
-            width: `${p.size}px`,
-            height: `${Math.max(6, p.size * 0.6)}px`,
-            background: `hsla(${p.hue}, 92%, 62%, 0.95)`,
-            transform: `rotate(${p.rot}deg)`,
-            animation: `confettiFall ${p.dur}s cubic-bezier(.1,.8,.2,1) ${p.delay}s forwards`,
-            ['--drift' as any]: `${p.drift}px`,
-          }}
-        />
-      ))}
-
-      <style jsx>{`
-        @keyframes confettiFall {
-          0% {
-            transform: translate3d(0, -10px, 0) rotate(0deg);
-            opacity: 0;
-          }
-          10% {
-            opacity: 1;
-          }
-          100% {
-            transform: translate3d(var(--drift), 115vh, 0) rotate(980deg);
-            opacity: 0;
-          }
-        }
-      `}</style>
-    </div>
-  )
+  const grid: { date: Date; inMonth: boolean }[][] = []
+  let cur = new Date(start)
+  for (let r = 0; r < 6; r++) {
+    const row: { date: Date; inMonth: boolean }[] = []
+    for (let c = 0; c < 7; c++) {
+      row.push({ date: new Date(cur), inMonth: cur.getMonth() === month })
+      cur.setDate(cur.getDate() + 1)
+    }
+    grid.push(row)
+  }
+  return grid
 }
 
-const inputCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7 text-white placeholder:text-white/45'
+function parseISO(iso: string) {
+  const [y, m, d] = iso.split('-').map((x) => Number(x))
+  return new Date(y, (m || 1) - 1, d || 1)
+}
 
-const selectCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7 text-white'
+function toISO(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
-const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
-const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
+function pretty(iso: string) {
+  const d = parseISO(iso)
+  return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' })
+}
+
