@@ -279,48 +279,69 @@ setRange('')
     }
   }
 
-  async function buildAgencyLeaders(): Promise<LeaderRow[]> {
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+async function buildAgencyLeaders(): Promise<LeaderRow[]> {
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    const { data: ds, error } = await supabase
-      .from('deals')
-      .select('user_id,premium,created_at')
-      .gte('created_at', monthStart.toISOString())
-      .limit(100000)
-
-    if (error || !ds) return []
-
-    const map = new Map<string, number>()
-    ds.forEach((r: any) => {
-      const uid = r.user_id
-      if (!uid) return
-      const prem = toPremium(r.premium)
-      const ap = prem * 12
-      map.set(uid, (map.get(uid) || 0) + ap)
+  // ✅ 1) Prefer RPC (SECURITY DEFINER) so ALL agents can see agency-wide top 5
+  try {
+    const { data, error } = await supabase.rpc('get_monthly_agency_top5', {
+      start_ts: monthStart.toISOString(),
+      end_ts: now.toISOString(),
     })
 
-    const top = Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
+    if (!error && Array.isArray(data)) {
+      // expected rows: { uid, name, avatar_url, total_ap }
+      return data.slice(0, 5).map((r: any) => ({
+        user_id: String(r.uid),
+        name: String(r.name || 'Agent'),
+        ap: Number(r.total_ap || 0),
+        avatar_url: r.avatar_url ?? null,
+      }))
+    }
+  } catch {}
 
-    const ids = top.map((t) => t[0])
-    if (!ids.length) return []
+  // ✅ 2) Fallback (works only if RLS allows reading all deals)
+  const { data: ds, error } = await supabase
+    .from('deals')
+    .select('user_id,premium,created_at')
+    .gte('created_at', monthStart.toISOString())
+    .limit(100000)
 
-    // ✅ also fetch avatar_url
-    const { data: ps } = await supabase.from('profiles').select('id,first_name,last_name,email,avatar_url').in('id', ids)
+  if (error || !ds) return []
 
-    const pmap = new Map<string, any>()
-    ;(ps || []).forEach((p: any) => pmap.set(p.id, p))
+  const map = new Map<string, number>()
+  ds.forEach((r: any) => {
+    const uid = r.user_id
+    if (!uid) return
+    const prem = toPremium(r.premium)
+    const ap = prem * 12
+    map.set(uid, (map.get(uid) || 0) + ap)
+  })
 
-    return top.map(([uid, ap]) => {
-      const p = pmap.get(uid)
-      const name =
-        [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() ||
-        (p?.email ? String(p.email).split('@')[0] : '—')
-      return { user_id: uid, name, ap, avatar_url: p?.avatar_url || null }
-    })
-  }
+  const top = Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+
+  const ids = top.map((t) => t[0])
+  if (!ids.length) return []
+
+  const { data: ps } = await supabase
+    .from('profiles')
+    .select('id,first_name,last_name,email,avatar_url')
+    .in('id', ids)
+
+  const pmap = new Map<string, any>()
+  ;(ps || []).forEach((p: any) => pmap.set(p.id, p))
+
+  return top.map(([uid, ap]) => {
+    const p = pmap.get(uid)
+    const name =
+      [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() ||
+      (p?.email ? String(p.email).split('@')[0] : '—')
+    return { user_id: uid, name, ap, avatar_url: p?.avatar_url || null }
+  })
+}
 
   const welcomeName =
     [me?.first_name, me?.last_name].filter(Boolean).join(' ').trim() ||
@@ -399,25 +420,28 @@ const rangeEndDt = useMemo(() => {
 
   const dealsSubmitted = useMemo(() => monthDeals.length, [monthDeals])
 
-  // ✅ Flow trend uses rangeDeals so selector reflects submitted data
-  const last7 = useMemo(() => {
-    const days: { label: string; count: number }[] = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now)
-      d.setDate(now.getDate() - i)
-      const dStart = startOfDay(d)
-      const next = new Date(dStart)
-      next.setDate(dStart.getDate() + 1)
+  // ✅ Flow trend uses rangeDeals so selector reflects PRODUCTION (AP), not deals
+const last7 = useMemo(() => {
+  const days: { label: string; ap: number }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    const dStart = startOfDay(d)
+    const next = new Date(dStart)
+    next.setDate(dStart.getDate() + 1)
 
-      const count = rangeDeals.filter((x) => x.dt >= dStart && x.dt < next).length
-      const label = d.toLocaleDateString(undefined, { weekday: 'short' })
-      days.push({ label, count })
-    }
-    return days
-  }, [rangeDeals, now])
+    const ap = rangeDeals
+      .filter((x) => x.dt >= dStart && x.dt < next)
+      .reduce((s, x) => s + Number(x.apNum || 0), 0)
 
-  const lineLabels = useMemo(() => last7.map((x) => x.label), [last7])
-  const lineValues = useMemo(() => last7.map((x) => x.count), [last7])
+    const label = d.toLocaleDateString(undefined, { weekday: 'short' })
+    days.push({ label, ap })
+  }
+  return days
+}, [rangeDeals, now])
+
+const lineLabels = useMemo(() => last7.map((x) => x.label), [last7])
+const lineValues = useMemo(() => last7.map((x) => x.ap), [last7])
 
   // ✅ donut uses rangeDeals (selector)
   const carrierDist = useMemo(() => {
@@ -717,7 +741,7 @@ const rangeEndDt = useMemo(() => {
 
               {/* ✅ donut gets same glow / glass effect as goals donuts (CarrierDonut patch below supports glow) */}
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-5">
-                <CarrierDonut labels={carrierDist.labels} values={carrierDist.values} glow />
+                <CarrierDonut   labels={carrierDist.labels}   values={carrierDist.values}   glow   colors={['#4CBB17', '#FF00FF', '#EF4444', '#F97316', '#3B82F6', '#14B8A6']} />
               </div>
 
               <div className="space-y-3">
