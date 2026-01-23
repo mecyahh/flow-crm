@@ -1,4 +1,5 @@
 // ✅ NEW FILE: /app/components/FlowRangePicker.tsx
+// (PASTE EXACTLY — your code is fine)
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -158,19 +159,11 @@ export default function FlowRangePicker({
 
   const normalized = normalizeRange(startISO, endISO)
   const displayText =
-    normalized.start && normalized.end
-      ? `${pretty(normalized.start)}  -  ${pretty(normalized.end)}`
-      : placeholder
+    normalized.start && normalized.end ? `${pretty(normalized.start)}  -  ${pretty(normalized.end)}` : placeholder
 
-  const detectedPreset = useMemo(() => detectPreset(normalized.start, normalized.end), [
-    normalized.start,
-    normalized.end,
-  ])
+  const detectedPreset = useMemo(() => detectPreset(normalized.start, normalized.end), [normalized.start, normalized.end])
 
-  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric',
-  })
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
 
   const grid = buildMonthGrid(viewYear, viewMonth)
   const todayISO = toISO(new Date())
@@ -208,7 +201,6 @@ export default function FlowRangePicker({
       className="fixed z-[2147483647] w-[320px] rounded-2xl border border-white/10 bg-[#0b0f1a]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
       style={{ top: pos.top, left: pos.left }}
     >
-      {/* top: start/end toggle */}
       <div className="px-3 py-2 flex items-center justify-between border-b border-white/10">
         <div className="flex items-center gap-2">
           <button
@@ -238,13 +230,11 @@ export default function FlowRangePicker({
         </div>
 
         <div className="text-[11px] text-white/55">
-          {normalized.start ? pretty(normalized.start) : '—'}{' '}
-          <span className="text-white/35">→</span>{' '}
+          {normalized.start ? pretty(normalized.start) : '—'} <span className="text-white/35">→</span>{' '}
           {normalized.end ? pretty(normalized.end) : '—'}
         </div>
       </div>
 
-      {/* calendar header */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-white/10">
         <button
           type="button"
@@ -291,7 +281,6 @@ export default function FlowRangePicker({
         </button>
       </div>
 
-      {/* grid */}
       <div className="px-4 py-3">
         <div className="grid grid-cols-7 gap-1 text-[11px] text-white/50 mb-2">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
@@ -308,9 +297,7 @@ export default function FlowRangePicker({
             const isToday = iso === todayISO
 
             const inRange =
-              normalized.start && normalized.end
-                ? isBetweenInclusive(iso, normalized.start, normalized.end)
-                : false
+              normalized.start && normalized.end ? isBetweenInclusive(iso, normalized.start, normalized.end) : false
 
             const isStart = normalized.start && iso === normalized.start
             const isEnd = normalized.end && iso === normalized.end
@@ -321,17 +308,12 @@ export default function FlowRangePicker({
               isStart || isEnd
                 ? 'bg-blue-600 border-blue-500/60 text-white'
                 : inRange
-                  ? 'bg-white/10 border-white/10 hover:bg-white/12'
-                  : 'bg-white/5 border-white/10 hover:bg-white/10'
+                ? 'bg-white/10 border-white/10 hover:bg-white/12'
+                : 'bg-white/5 border-white/10 hover:bg-white/10'
             const ring = isToday && !(isStart || isEnd) ? 'ring-1 ring-white/15' : ''
 
             return (
-              <button
-                key={i}
-                type="button"
-                onClick={() => onPickDay(iso)}
-                className={[base, bg, dim, ring].join(' ')}
-              >
+              <button key={i} type="button" onClick={() => onPickDay(iso)} className={[base, bg, dim, ring].join(' ')}>
                 {cell.date.getDate()}
               </button>
             )
@@ -368,11 +350,9 @@ export default function FlowRangePicker({
     </div>
   ) : null
 
-  // ✅ Thin single control (preset + range)
   return (
     <div ref={anchorRef} className="relative inline-flex items-center">
       <div className="inline-flex items-center rounded-md border border-white/10 bg-white/5 overflow-hidden">
-        {/* Preset */}
         <div className="relative">
           <button
             type="button"
@@ -403,10 +383,8 @@ export default function FlowRangePicker({
           ) : null}
         </div>
 
-        {/* Divider */}
         <div className="w-px self-stretch bg-white/10" />
 
-        {/* Range */}
         <button
           type="button"
           onClick={() => {
@@ -430,18 +408,8 @@ export default function FlowRangePicker({
 function CalendarGlassIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M7 3v3M17 3v3"
-        stroke="rgba(255,255,255,0.80)"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M4 8h16"
-        stroke="rgba(255,255,255,0.80)"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+      <path d="M7 3v3M17 3v3" stroke="rgba(255,255,255,0.80)" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M4 8h16" stroke="rgba(255,255,255,0.80)" strokeWidth="1.8" strokeLinecap="round" />
       <path
         d="M6 6h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2Z"
         stroke="rgba(255,255,255,0.80)"
@@ -458,7 +426,6 @@ function CalendarGlassIcon() {
   )
 }
 
-/* helpers */
 function buildMonthGrid(year: number, month: number) {
   const first = new Date(year, month, 1)
   const startDowMon0 = (first.getDay() + 6) % 7
@@ -503,7 +470,6 @@ function isBetweenInclusive(iso: string, a: string, b: string) {
   return t >= lo && t <= hi
 }
 
-/* presets */
 function startOfWeekMon(d: Date) {
   const day = (d.getDay() + 6) % 7
   const out = new Date(d)
