@@ -52,7 +52,7 @@ export default function FlowDatePicker({
   placeholder = 'Select date',
   minYear = 1900,
   maxYear,
-  range = true,
+  range = false,
 }: {
   value: string
   onChange: (v: string) => void
