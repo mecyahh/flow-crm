@@ -1,140 +1,127 @@
-/* ✅ REPLACE ENTIRE FILE: /app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* -------------------------------------------------------
-  BASE TOKENS (default theme: blue)
+  BASE TOKENS (default theme: blue)
 ------------------------------------------------------- */
 :root {
-  --bg: #0b0f1a;
-  --panel: rgba(255, 255, 255, 0.06);
-  --panel2: rgba(255, 255, 255, 0.04);
-  --border: rgba(255, 255, 255, 0.10);
-  --border2: rgba(255, 255, 255, 0.16);
+  --bg: #0b0f1a;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel2: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.10);
+  --border2: rgba(255, 255, 255, 0.16);
 
-  --text: #ffffff;
-  --muted: rgba(255, 255, 255, 0.60);
-  --muted2: rgba(255, 255, 255, 0.45);
+  --text: #ffffff;
+  --muted: rgba(255, 255, 255, 0.60);
+  --muted2: rgba(255, 255, 255, 0.45);
 
-  --accent: #3b82f6;
-  --accent2: #60a5fa;
-  --accentText: #ffffff;
+  --accent: #3b82f6;
+  --accent2: #60a5fa;
+  --accentText: #ffffff;
 
-  --glow: rgba(59, 130, 246, 0.30);
+  --glow: rgba(59, 130, 246, 0.30);
 }
 
 /* -------------------------------------------------------
-  THEMES (change ALL key tokens, not just accent)
+  THEMES (change ALL key tokens, not just accent)
+  ThemeProvider will set: <html data-theme="gold">
 ------------------------------------------------------- */
 html[data-theme='blue'] {
-  --accent: #3b82f6;
-  --accent2: #60a5fa;
-  --glow: rgba(59, 130, 246, 0.30);
+  --accent: #3b82f6;
+  --accent2: #60a5fa;
+  --glow: rgba(59, 130, 246, 0.30);
 }
 
 html[data-theme='gold'] {
-  --bg: #0a0a0b;
-  --panel: rgba(255, 255, 255, 0.06);
-  --panel2: rgba(255, 255, 255, 0.04);
-  --border: rgba(255, 255, 255, 0.12);
+  --bg: #0a0a0b;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel2: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.12);
 
-  --accent: #f5c542;
-  --accent2: #ffd56a;
-  --accentText: #0b0f1a;
-  --glow: rgba(245, 197, 66, 0.26);
+  --accent: #f5c542;
+  --accent2: #ffd56a;
+  --accentText: #0b0f1a;
+  --glow: rgba(245, 197, 66, 0.26);
 }
 
 html[data-theme='green'] {
-  --accent: #22c55e;
-  --accent2: #86efac;
-  --glow: rgba(34, 197, 94, 0.26);
+  --accent: #22c55e;
+  --accent2: #86efac;
+  --glow: rgba(34, 197, 94, 0.26);
 }
 
 html[data-theme='red'] {
-  --accent: #ef4444;
-  --accent2: #fca5a5;
-  --glow: rgba(239, 68, 68, 0.24);
+  --accent: #ef4444;
+  --accent2: #fca5a5;
+  --glow: rgba(239, 68, 68, 0.24);
 }
 
 html[data-theme='mono'] {
-  --accent: #e5e7eb;
-  --accent2: #9ca3af;
-  --accentText: #0b0f1a;
-  --glow: rgba(255, 255, 255, 0.18);
+  --accent: #e5e7eb;
+  --accent2: #9ca3af;
+  --accentText: #0b0f1a;
+  --glow: rgba(255, 255, 255, 0.18);
 }
 
 html[data-theme='fuchsia'] {
-  --accent: #d946ef;
-  --accent2: #f0abfc;
-  --glow: rgba(217, 70, 239, 0.22);
+  --accent: #d946ef;
+  --accent2: #f0abfc;
+  --glow: rgba(217, 70, 239, 0.22);
 }
 
 html[data-theme='bw'] {
-  --bg: #ffffff;
-  --text: #0b0f1a;
-  --muted: rgba(11, 15, 26, 0.60);
-  --muted2: rgba(11, 15, 26, 0.45);
+  --bg: #ffffff;
+  --text: #0b0f1a;
+  --muted: rgba(11, 15, 26, 0.60);
+  --muted2: rgba(11, 15, 26, 0.45);
 
-  --panel: rgba(0, 0, 0, 0.04);
-  --panel2: rgba(0, 0, 0, 0.03);
-  --border: rgba(0, 0, 0, 0.12);
+  --panel: rgba(0, 0, 0, 0.04);
+  --panel2: rgba(0, 0, 0, 0.03);
+  --border: rgba(0, 0, 0, 0.12);
 
-  --accent: #111827;
-  --accent2: #374151;
-  --accentText: #ffffff;
-  --glow: rgba(0, 0, 0, 0.18);
+  --accent: #111827;
+  --accent2: #374151;
+  --accentText: #ffffff;
+  --glow: rgba(0, 0, 0, 0.18);
 }
 
 html[data-theme='orange'] {
-  --accent: #f97316;
-  --accent2: #fdba74;
-  --glow: rgba(249, 115, 22, 0.22);
+  --accent: #f97316;
+  --accent2: #fdba74;
+  --glow: rgba(249, 115, 22, 0.22);
 }
 
 /* -------------------------------------------------------
-  GLOBAL PAGE STYLES
+  GLOBAL PAGE STYLES
 ------------------------------------------------------- */
 html,
 body {
-  height: 100%;
+  height: 100%;
 }
 
 body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
 }
 
 /* -------------------------------------------------------
-  GLASS SYSTEM (theme-aware)
+  GLASS SYSTEM (theme-aware)
 ------------------------------------------------------- */
 .glass {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-radius: 16px;
 }
 
 .glass-2 {
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 16px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 16px;
 }
 
-/* -------------------------------------------------------
-  ✅ FIX: native <select> option text (Windows/Linux)
-  Some browsers render the dropdown menu white; your app text is white.
-  This forces options readable everywhere without changing layout.
-------------------------------------------------------- */
-select {
-  color: var(--text);
-}
-
-select option {
-  color: #0b0f1a;
-  background: #ffffff;
-}
