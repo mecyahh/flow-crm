@@ -298,46 +298,66 @@ export default function MyAgencyPage() {
   // ✅ LEG DONUT DISTRIBUTION (Direct downlines only)
   // ✅ EXCLUDE legs unless the DIRECT downline has DOWNLINES producing in range
   const legDist = useMemo(() => {
-    if (!me) return { labels: ['No Data'], values: [100] }
+  if (!me) return { labels: ['No Data'], values: [100] }
 
-    const directs = (directIds || []).slice()
-    if (!directs.length) return { labels: ['No Data'], values: [100] }
+  const directs = (directIds || []).slice()
+  if (!directs.length) return { labels: ['No Data'], values: [100] }
 
-    // Sum AP by user in current range
-    const apByUser = new Map<string, number>()
-    rangeDeals.forEach((d) => {
-      if (!d.user_id) return
-      apByUser.set(d.user_id, (apByUser.get(d.user_id) || 0) + Number(d.ap || 0))
+  // Sum AP by user in current range
+  const apByUser = new Map<string, number>()
+  rangeDeals.forEach((d) => {
+    if (!d.user_id) return
+    apByUser.set(d.user_id, (apByUser.get(d.user_id) || 0) + Number(d.ap || 0))
+  })
+
+  // ✅ Donut is ONLY for direct legs that have producing downlines
+  // plus one "misc" slice for direct downlines with no producing downlines (personal only)
+  const agencyLegRows: { label: string; ap: number }[] = []
+  let miscNoAgencyAp = 0
+
+  directs.forEach((root) => {
+    // root + descendants
+    const legIdsAll = buildTreeIds(root, directory)
+    const downlineIds = legIdsAll.filter((id) => id !== root)
+
+    const rootAp = apByUser.get(root) || 0
+
+    let downlineAp = 0
+    downlineIds.forEach((uid) => {
+      downlineAp += apByUser.get(uid) || 0
     })
 
-    const rows: { label: string; ap: number }[] = directs
-      .map((root) => {
-        const legIdsAll = buildTreeIds(root, directory) // includes root + descendants
-        const legDownlineIds = legIdsAll.filter((id) => id !== root) // descendants only
-
-        let downlineAP = 0
-        legDownlineIds.forEach((uid) => {
-          downlineAP += apByUser.get(uid) || 0
-        })
-
-        // ✅ If none of their DOWNLINES are producing, exclude from donut
-        if (downlineAP <= 0) return null
-
-        const p = byId.get(root)
-        return { label: p ? displayName(p) : 'Agent', ap: downlineAP }
-      })
-      .filter(Boolean) as { label: string; ap: number }[]
-
-    rows.sort((a, b) => b.ap - a.ap)
-
-    const total = rows.reduce((s, r) => s + r.ap, 0)
-    if (!total) return { labels: ['No Data'], values: [100] }
-
-    return {
-      labels: rows.map((r) => r.label),
-      values: rows.map((r) => r.ap),
+    // Only include "agency" legs if they have producing downlines (downlineAp > 0)
+    if (downlineAp > 0) {
+      const p = byId.get(root)
+      const label = p ? displayName(p) : 'Agent'
+      agencyLegRows.push({ label, ap: rootAp + downlineAp })
+    } else {
+      // No producing downlines => goes into one combined misc slice (if they personally produced)
+      if (rootAp > 0) miscNoAgencyAp += rootAp
     }
-  }, [me, directIds, rangeDeals, directory, byId])
+  })
+
+  // Build final donut
+  const labels: string[] = []
+  const values: number[] = []
+
+  agencyLegRows.sort((a, b) => b.ap - a.ap)
+  agencyLegRows.forEach((r) => {
+    labels.push(r.label)
+    values.push(r.ap)
+  })
+
+  if (miscNoAgencyAp > 0) {
+    labels.push('No Agency Yet (Direct)')
+    values.push(miscNoAgencyAp)
+  }
+
+  const total = values.reduce((s, v) => s + Number(v || 0), 0)
+  if (!total) return { labels: ['No Data'], values: [100] }
+
+  return { labels, values }
+}, [me, directIds, rangeDeals, directory, byId])
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
