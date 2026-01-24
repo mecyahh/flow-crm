@@ -385,7 +385,7 @@ export default function SettingsPage() {
       if (!invite.email.trim()) throw new Error('Email required')
       if (!invite.first_name.trim() || !invite.last_name.trim()) throw new Error('Name required')
 
-      const res = await fetch('/api/admin/invite', {
+      const res = await fetch('/api/admin/invite-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: token },
         body: JSON.stringify({
@@ -403,6 +403,10 @@ export default function SettingsPage() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Invite failed')
 
+// ✅ Show PIN to admin (until email send is wired)
+if (json?.pin) {
+  setToast(`Invite created ✅ PIN: ${json.pin}`)
+}
       setInviteOpen(false)
       setInvite({
         first_name: '',
