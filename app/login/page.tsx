@@ -2,18 +2,25 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login')
-  const [loading, setLoading] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [mode, setMode] = useState<'login' | 'pin' | 'reset'>('login')
+const [loading, setLoading] = useState(false)
+const [toast, setToast] = useState<string | null>(null)
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
+const [email, setEmail] = useState('')
+const [password, setPassword] = useState('')
 
+// ✅ PIN mode uses a 6-digit code
+const [pin, setPin] = useState('')
+
+// ✅ Forced password setup
+const [setPwOpen, setSetPwOpen] = useState(false)
+const [newPw, setNewPw] = useState('')
+const [newPw2, setNewPw2] = useState('')
+const [pwSaving, setPwSaving] = useState(false)
+  
   const appUrl =
     (process.env.NEXT_PUBLIC_APP_URL || '').trim() ||
     (typeof window !== 'undefined' ? window.location.origin : '')
@@ -26,47 +33,115 @@ export default function LoginPage() {
   }, [])
 
   const canSubmit = useMemo(() => {
-    const e = email.trim()
-    if (!e.includes('@')) return false
-    if (mode === 'reset') return true
-    if (password.length < 6) return false
-    if (mode === 'signup' && password !== confirm) return false
-    return true
-  }, [email, password, confirm, mode])
-
+  const e = email.trim()
+  if (!e.includes('@')) return false
+  if (mode === 'reset') return true
+  if (mode === 'pin') return pin.trim().length >= 6
+  return password.length >= 6
+}, [email, password, pin, mode])
+  
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!canSubmit) return
+  e.preventDefault()
+  if (!canSubmit) return
 
-    try {
-      setLoading(true)
-      setToast(null)
+  try {
+    setLoading(true)
+    setToast(null)
 
-      if (mode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        })
-        if (error) throw error
-        window.location.href = '/dashboard'
-        return
+    // ✅ Normal login (email + password)
+    if (mode === 'login') {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
+      if (error) throw error
+
+      // ✅ Check if this user must set password
+      const uid = data.user?.id
+      if (uid) {
+        const { data: prof } = await supabase.from('profiles').select('must_set_password').eq('id', uid).single()
+        if (prof?.must_set_password) {
+          setSetPwOpen(true)
+          return
+        }
       }
 
-      if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${appUrl}/login`,
-          },
-        })
-        if (error) throw error
-        setToast('Account created ✅ Check your email if confirmation is required.')
-        setMode('login')
-        setPassword('')
-        setConfirm('')
-        return
+      window.location.href = '/dashboard'
+      return
+    }
+
+    // ✅ PIN login (email + pin as temp password)
+    if (mode === 'pin') {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: pin.trim(),
+      })
+      if (error) throw error
+
+      const uid = data.user?.id
+      if (uid) {
+        const { data: prof } = await supabase.from('profiles').select('must_set_password').eq('id', uid).single()
+        // PIN users should always be true, but we’ll still guard
+        if (prof?.must_set_password) {
+          setSetPwOpen(true)
+          return
+        }
       }
+
+      window.location.href = '/dashboard'
+      return
+    }
+
+    // reset
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${appUrl}/reset-password`,
+    })
+    if (error) throw error
+    setToast('Password reset email sent ✅')
+    setMode('login')
+  } catch (err: any) {
+    setToast(err?.message || 'Something went wrong')
+  } finally {
+    setLoading(false)
+  }
+}
+
+async function saveNewPassword() {
+  if (!newPw || newPw.length < 6) {
+    setToast('Password must be at least 6 characters')
+    return
+  }
+  if (newPw !== newPw2) {
+    setToast('Passwords do not match')
+    return
+  }
+
+  try {
+    setPwSaving(true)
+    setToast(null)
+
+    const { data } = await supabase.auth.getUser()
+    const uid = data.user?.id
+    if (!uid) throw new Error('Not logged in')
+
+    // ✅ Set password
+    const { error: upErr } = await supabase.auth.updateUser({ password: newPw })
+    if (upErr) throw upErr
+
+    // ✅ Clear flag so they won’t be forced again
+    const { error: profErr } = await supabase.from('profiles').update({ must_set_password: false }).eq('id', uid)
+    if (profErr) throw profErr
+
+    setSetPwOpen(false)
+    setNewPw('')
+    setNewPw2('')
+    window.location.href = '/dashboard'
+  } catch (e: any) {
+    setToast(e?.message || 'Could not set password')
+  } finally {
+    setPwSaving(false)
+  }
+}
 
       // reset
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
@@ -97,6 +172,66 @@ export default function LoginPage() {
         </div>
       )}
 
+{setPwOpen && (
+  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4">
+    <div className="w-full max-w-md glass rounded-3xl border border-white/10 p-6">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <div className="text-sm font-semibold">Set password to continue</div>
+          <div className="text-xs text-white/60 mt-1">This is required on your first login.</div>
+        </div>
+        <button
+          onClick={async () => {
+            // keep them locked until they set it
+            await supabase.auth.signOut()
+            setSetPwOpen(false)
+          }}
+          className={btnSoft}
+          type="button"
+        >
+          Cancel
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <Field label="New password">
+          <input
+            className={inputCls}
+            value={newPw}
+            onChange={(e) => setNewPw(e.target.value)}
+            type="password"
+            placeholder="••••••••"
+            autoComplete="new-password"
+          />
+        </Field>
+
+        <Field label="Confirm new password">
+          <input
+            className={inputCls}
+            value={newPw2}
+            onChange={(e) => setNewPw2(e.target.value)}
+            type="password"
+            placeholder="••••••••"
+            autoComplete="new-password"
+          />
+        </Field>
+
+        <button
+          onClick={saveNewPassword}
+          disabled={pwSaving}
+          className={[
+            'w-full rounded-2xl px-4 py-3 text-sm font-semibold transition border',
+            pwSaving ? 'bg-white/5 border-white/10 text-white/40 cursor-not-allowed' : 'bg-blue-600 border-blue-500/60 hover:bg-blue-500',
+          ].join(' ')}
+          type="button"
+        >
+          {pwSaving ? 'Saving…' : 'Save password'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+      
       <div className="w-full max-w-[980px] grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="glass rounded-3xl border border-white/10 p-8 overflow-hidden relative">
           <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-blue-600/20 blur-3xl" />
@@ -123,38 +258,23 @@ export default function LoginPage() {
         </div>
 
         <div className="glass rounded-3xl border border-white/10 p-8">
-          <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold">
-              {mode === 'login' ? 'Log in' : mode === 'signup' ? 'Create account' : 'Reset password'}
-            </div>
-            <Link href="/dashboard" className="text-xs text-white/60 hover:underline">
-              Back to dashboard
-            </Link>
-          </div>
+         <div className="flex items-center justify-between">
+  <div className="text-lg font-semibold">
+    {mode === 'login' ? 'Log in' : mode === 'pin' ? 'Log in with PIN' : 'Reset password'}
+  </div>
+</div>
 
           <div className="mt-5 grid grid-cols-3 gap-2">
-            <button
-              onClick={() => setMode('login')}
-              className={pill(mode === 'login')}
-              type="button"
-            >
-              Login
-            </button>
-            <button
-              onClick={() => setMode('signup')}
-              className={pill(mode === 'signup')}
-              type="button"
-            >
-              Create
-            </button>
-            <button
-              onClick={() => setMode('reset')}
-              className={pill(mode === 'reset')}
-              type="button"
-            >
-              Forgot
-            </button>
-          </div>
+  <button onClick={() => setMode('login')} className={pill(mode === 'login')} type="button">
+    Login
+  </button>
+  <button onClick={() => setMode('pin')} className={pill(mode === 'pin')} type="button">
+    PIN
+  </button>
+  <button onClick={() => setMode('reset')} className={pill(mode === 'reset')} type="button">
+    Forgot
+  </button>
+</div>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <Field label="Email">
@@ -167,30 +287,30 @@ export default function LoginPage() {
               />
             </Field>
 
-            {mode !== 'reset' && (
-              <Field label="Password">
-                <input
-                  className={inputCls}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  type="password"
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                />
-              </Field>
-            )}
+            {mode !== 'reset' && mode !== 'pin' && (
+  <Field label="Password">
+    <input
+      className={inputCls}
+      value={password}
+      onChange={(e) => setPassword(e.target.value)}
+      placeholder="••••••••"
+      type="password"
+      autoComplete="current-password"
+    />
+  </Field>
+)}
 
-            {mode === 'signup' && (
-              <Field label="Confirm password">
-                <input
-                  className={inputCls}
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="••••••••"
-                  type="password"
-                  autoComplete="new-password"
-                />
-              </Field>
+{mode === 'pin' && (
+  <Field label="6-digit PIN code">
+    <input
+      className={inputCls}
+      value={pin}
+      onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+      placeholder="123456"
+      inputMode="numeric"
+    />
+  </Field>
+)}
             )}
 
             <button
@@ -203,33 +323,22 @@ export default function LoginPage() {
               ].join(' ')}
               type="submit"
             >
-              {loading
-                ? 'Working…'
-                : mode === 'login'
-                ? 'Log in'
-                : mode === 'signup'
-                ? 'Create account'
-                : 'Send reset email'}
+              {loading ? 'Working…' : mode === 'login' ? 'Log in' : mode === 'pin' ? 'Log in with PIN' : 'Send reset email'}
             </button>
 
             <div className="flex items-center justify-between text-xs text-white/60 pt-2">
-              <button
-                type="button"
-                className="hover:underline"
-                onClick={() => setMode('reset')}
-              >
-                Forgot password?
-              </button>
-              <div className="flex items-center gap-2">
-                <span>{mode === 'login' ? `Don't have an account?` : `Already have an account?`}</span>
-                <button
-                  type="button"
-                  className="text-white hover:underline"
-                  onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-                >
-                  {mode === 'login' ? 'Create' : 'Log in'}
-                </button>
-              </div>
+  <button type="button" className="hover:underline" onClick={() => setMode('reset')}>
+    Forgot password?
+  </button>
+
+  <button
+    type="button"
+    className="text-white/80 hover:underline"
+    onClick={() => setMode(mode === 'pin' ? 'login' : 'pin')}
+  >
+    {mode === 'pin' ? 'Use password instead' : 'Login with PIN'}
+  </button>
+</div>
             </div>
 
             <div className="text-[11px] text-white/45 pt-2">
