@@ -1,3 +1,4 @@
+// ✅ FULL REPLACEMENT FILE: /app/analytics/page.tsx
 'use client'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,8 @@ type ParsedDeal = DealRow & {
 
 const UNDER_5K_ANNUAL = 5000
 
+type Mode = 'personal' | 'team'
+
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
@@ -50,12 +53,19 @@ export default function AnalyticsPage() {
   const [underOpen, setUnderOpen] = useState(false)
   const [nonWriterOpen, setNonWriterOpen] = useState(false)
 
-  // ✅ team scope for agents (self + downlines). For admin/owner, null = all.
+  // ✅ team scope for owners (self + downlines)
   const [teamIds, setTeamIds] = useState<string[] | null>(null)
 
-  const isAdminOrOwner = useMemo(() => {
-    return !!(me && (me.role === 'admin' || me.is_agency_owner))
-  }, [me])
+  // ✅ Personal vs Team toggle (Personal default)
+  const [mode, setMode] = useState<Mode>('personal')
+
+  const isAdmin = me?.role === 'admin'
+  const isOwner = !!me?.is_agency_owner
+  const canTeamView = isOwner || isAdmin
+
+  // IMPORTANT: you asked "ONLY show data for signed-in agent, not company analytics"
+  // So: Admin is treated like a normal user (personal default). Team mode is only meaningful for owners.
+  const teamModeAllowed = isOwner && mode === 'team'
 
   useEffect(() => {
     boot()
@@ -65,25 +75,24 @@ export default function AnalyticsPage() {
   useEffect(() => {
     if (!me?.id) return
     ;(async () => {
-      // compute team ids for non-admin/owner
-      if (isAdminOrOwner) {
-        setTeamIds(null)
+      if (!isOwner) {
+        setTeamIds([me.id])
         return
       }
       try {
         const ids = await buildTeamIds(me.id)
-        setTeamIds(ids)
+        setTeamIds(ids.length ? ids : [me.id])
       } catch {
         setTeamIds([me.id])
       }
     })()
-  }, [me?.id, isAdminOrOwner])
+  }, [me?.id, isOwner])
 
   useEffect(() => {
     if (!me?.id) return
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me?.id, isAdminOrOwner, teamIds, rangeValue])
+  }, [me?.id, rangeValue, mode, teamIds])
 
   async function boot() {
     setLoading(true)
@@ -167,9 +176,14 @@ export default function AnalyticsPage() {
     setLoading(true)
     setToast(null)
 
-    // ✅ agents directory:
-    // - admin/owner: load all (for non-writers, names, etc.)
-    // - agent: load at least their team IDs for display names (fallback to all if that fails)
+    // ✅ scope ids for this view
+    const idsForView =
+      teamModeAllowed && teamIds && teamIds.length > 0
+        ? teamIds
+        : // personal: always only me
+          [me.id]
+
+    // ✅ agents directory (only what we need for names + non-writers)
     try {
       const base = supabase
         .from('profiles')
@@ -177,15 +191,35 @@ export default function AnalyticsPage() {
         .order('created_at', { ascending: false })
         .limit(5000)
 
-      const { data: aData } =
-        isAdminOrOwner || !teamIds || teamIds.length === 0 ? await base : await base.in('id', teamIds)
-
+      const { data: aData } = await base.in('id', idsForView)
       setAgents((aData || []) as Profile[])
     } catch {
       setAgents([])
     }
 
-    // Deals query (RLS):
+    // ✅ Deals query: prefer secure RPC if present, fallback to direct query.
+    // RPC name assumed: analytics_deals(start, end, mode)
+    // NOTE: your SQL should return premium as numeric/text (NOT jsonb).
+    try {
+      const rpcMode: Mode = teamModeAllowed ? 'team' : 'personal'
+
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('analytics_deals', {
+        p_start: queryStartISO,
+        p_end: queryEndISO,
+        p_mode: rpcMode,
+      })
+
+      if (!rpcErr && rpcData) {
+        setDeals((rpcData || []) as DealRow[])
+        setLoading(false)
+        return
+      }
+      // if rpc fails, fall through to direct query
+    } catch {
+      // fall through
+    }
+
+    // Fallback (requires RLS policy on deals)
     const q = supabase
       .from('deals')
       .select('id,created_at,agent_id,premium,company')
@@ -194,11 +228,8 @@ export default function AnalyticsPage() {
       .order('created_at', { ascending: true })
       .limit(20000)
 
-    // ✅ Scope rules:
-    // - admin/owner: all deals (as before)
-    // - agent: their team (self + downlines). If no teamIds computed, fallback to self.
     const scoped =
-      isAdminOrOwner ? q : teamIds && teamIds.length > 0 ? q.in('agent_id', teamIds) : q.eq('agent_id', me.id)
+      teamModeAllowed && teamIds && teamIds.length > 0 ? q.in('agent_id', teamIds) : q.eq('agent_id', me.id)
 
     const { data: dData, error: dErr } = await scoped
 
@@ -251,7 +282,6 @@ export default function AnalyticsPage() {
 
   /* ---------------- KPIs ---------------- */
 
-  // ✅ Annual totals everywhere except Avg Premium/Deal
   const totalAnnual = useMemo(() => parsed.reduce((s, d) => s + d.annualNum, 0), [parsed])
   const dealsCount = parsed.length
   const avgPremiumPerDeal = dealsCount ? parsed.reduce((s, d) => s + d.premiumNum, 0) / dealsCount : 0
@@ -337,7 +367,6 @@ export default function AnalyticsPage() {
     return bestVal ? best : '—'
   }, [parsed])
 
-  // Daily trend uses ANNUAL
   const dailyAnnual = useMemo(() => {
     const s = parsedRange.start ? new Date(parsedRange.start + 'T00:00:00') : new Date()
     const e = parsedRange.end ? new Date(parsedRange.end + 'T00:00:00') : new Date()
@@ -365,7 +394,7 @@ export default function AnalyticsPage() {
 
   const trendMax = useMemo(() => Math.max(1, ...dailyAnnual.map((x) => x.v)), [dailyAnnual])
 
-  // Carrier breakdown (admin/owner only) uses ANNUAL
+  // For owners only, we show by-carrier in TEAM mode.
   const byCarrier = useMemo(() => {
     const m = new Map<string, { carrier: string; annual: number; deals: number }>()
     parsed.forEach((d) => {
@@ -399,12 +428,18 @@ export default function AnalyticsPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Analytics</h1>
-            <p className="text-sm text-white/60 mt-1">
-              Range applies to everything • Annual premium shown (premium × 12).
-            </p>
+            <p className="text-sm text-white/60 mt-1">Range applies to everything • Annual premium shown (premium × 12).</p>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* ✅ Toggle (Personal orange default, Team fuchsia) */}
+            <ModeToggle
+              canTeam={canTeamView}
+              isOwner={isOwner}
+              mode={mode}
+              onChange={(m) => setMode(m)}
+            />
+
             <button onClick={() => loadData()} className={btnGlass}>
               Refresh
             </button>
@@ -459,11 +494,7 @@ export default function AnalyticsPage() {
 
           {/* Collapsible under 5k */}
           <div className="glass rounded-2xl border border-white/10 p-6">
-            <button
-              type="button"
-              onClick={() => setUnderOpen((s) => !s)}
-              className="w-full flex items-center justify-between"
-            >
+            <button type="button" onClick={() => setUnderOpen((s) => !s)} className="w-full flex items-center justify-between">
               <div className="text-left">
                 <div className="text-sm font-semibold">Agents under ${formatMoney2(UNDER_5K_ANNUAL)} (Annual)</div>
                 <div className="text-xs text-white/55 mt-1">Collapsible for a cleaner look.</div>
@@ -476,7 +507,13 @@ export default function AnalyticsPage() {
                 <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
                   <Row head left="Agent" mid="Annual" right="Deals" />
                   {(loading ? [] : under5kAgents.slice(0, 12)).map((a) => (
-                    <Row key={a.agent_id} left={a.name} mid={`$${formatMoney2(a.annual)}`} right={String(a.deals)} dangerMid />
+                    <Row
+                      key={a.agent_id}
+                      left={a.name}
+                      mid={`$${formatMoney2(a.annual)}`}
+                      right={String(a.deals)}
+                      dangerMid
+                    />
                   ))}
                   {!loading && under5kAgents.length === 0 && <Row left="—" mid="None ✅" right="—" />}
                 </div>
@@ -498,11 +535,7 @@ export default function AnalyticsPage() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 overflow-hidden">
-              <MiniAreaChart
-                data={dailyAnnual.map((x) => x.v)}
-                max={trendMax}
-                labels={dailyAnnual.map((x) => x.label)}
-              />
+              <MiniAreaChart data={dailyAnnual.map((x) => x.v)} max={trendMax} labels={dailyAnnual.map((x) => x.label)} />
 
               <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-2 text-[11px] text-white/45">
                 {dailyAnnual.slice(Math.max(0, dailyAnnual.length - 8)).map((x) => (
@@ -514,10 +547,10 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* ✅ Company analytics ONLY for admin/owner */}
-          {isAdminOrOwner ? (
+          {/* ✅ By Carrier ONLY when Owner + Team mode */}
+          {teamModeAllowed ? (
             <div className="glass rounded-2xl border border-white/10 p-6">
-              <div className="text-base font-semibold mb-4">By Carrier (Annual)</div>
+              <div className="text-base font-semibold mb-4">Team By Carrier (Annual)</div>
               <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
                 <Row head left="Carrier" mid="Annual" right="Deals" />
                 {(loading ? [] : byCarrier.slice(0, 10)).map((c) => (
@@ -525,23 +558,21 @@ export default function AnalyticsPage() {
                 ))}
                 {!loading && byCarrier.length === 0 && <Row left="—" mid="No data" right="—" />}
               </div>
-              <div className="mt-3 text-[11px] text-white/50">Visible to admin/owner only.</div>
+              <div className="mt-3 text-[11px] text-white/50">Visible in Team mode for agency owners.</div>
             </div>
           ) : (
             <div className="glass rounded-2xl border border-white/10 p-6">
               <div className="text-base font-semibold mb-2">By Carrier</div>
-              <div className="text-sm text-white/60">Admin-only.</div>
+              <div className="text-sm text-white/60">
+                {isOwner ? 'Switch to Team to see downline carrier breakdown.' : 'Personal analytics only.'}
+              </div>
             </div>
           )}
         </section>
 
         {/* NON WRITERS (collapsible) */}
         <section className="mt-6 glass rounded-2xl border border-white/10 p-6">
-          <button
-            type="button"
-            onClick={() => setNonWriterOpen((s) => !s)}
-            className="w-full flex items-center justify-between mb-2"
-          >
+          <button type="button" onClick={() => setNonWriterOpen((s) => !s)} className="w-full flex items-center justify-between mb-2">
             <div className="text-left">
               <h2 className="text-base font-semibold">Non Writers</h2>
               <div className="text-xs text-white/55 mt-1">Agents with 0 deals in the selected range.</div>
@@ -575,6 +606,61 @@ export default function AnalyticsPage() {
 
 /* ---------- UI bits ---------- */
 
+function ModeToggle({
+  canTeam,
+  isOwner,
+  mode,
+  onChange,
+}: {
+  canTeam: boolean
+  isOwner: boolean
+  mode: 'personal' | 'team'
+  onChange: (m: 'personal' | 'team') => void
+}) {
+  // team is only meaningful for owners. If admin, we still hide team to avoid “company analytics”.
+  if (!canTeam || !isOwner) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/60">
+        Personal
+      </div>
+    )
+  }
+
+  const isTeam = mode === 'team'
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="text-xs text-white/60 mr-1">View</div>
+
+      <button
+        type="button"
+        onClick={() => onChange('personal')}
+        className={[
+          'rounded-2xl border px-3 py-2 text-xs font-semibold transition',
+          !isTeam
+            ? 'border-orange-400/40 bg-orange-500/15 text-orange-200'
+            : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10',
+        ].join(' ')}
+      >
+        Personal
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onChange('team')}
+        className={[
+          'rounded-2xl border px-3 py-2 text-xs font-semibold transition',
+          isTeam
+            ? 'border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-200'
+            : 'border-white/10 bg-white/5 text-white/60 hover:bg-white/10',
+        ].join(' ')}
+      >
+        Team
+      </button>
+    </div>
+  )
+}
+
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="glass rounded-2xl border border-white/10 p-6">
@@ -600,12 +686,7 @@ function Row({
   dangerRight?: boolean
 }) {
   return (
-    <div
-      className={[
-        'grid grid-cols-3 px-4 py-3 border-b border-white/10',
-        head ? 'text-xs text-white/60 bg-white/5' : 'text-sm',
-      ].join(' ')}
-    >
+    <div className={['grid grid-cols-3 px-4 py-3 border-b border-white/10', head ? 'text-xs text-white/60 bg-white/5' : 'text-sm'].join(' ')}>
       <div className="truncate">{left}</div>
       <div className={['text-center truncate', dangerMid ? 'text-red-400 font-semibold' : ''].join(' ')}>{mid}</div>
       <div className={['text-right truncate', dangerRight ? 'text-red-400 font-semibold' : ''].join(' ')}>{right}</div>
@@ -656,12 +737,7 @@ function MiniAreaChart({ data, max, labels }: { data: number[]; max: number; lab
   const hover = hoverIdx !== null && ptsArr[hoverIdx] ? ptsArr[hoverIdx] : null
 
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      className="w-full h-[180px]"
-      onMouseMove={onMove}
-      onMouseLeave={() => setHoverIdx(null)}
-    >
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-[180px]" onMouseMove={onMove} onMouseLeave={() => setHoverIdx(null)}>
       <defs>
         <linearGradient id="flowArea" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor="rgba(59,130,246,0.35)" />
@@ -669,7 +745,6 @@ function MiniAreaChart({ data, max, labels }: { data: number[]; max: number; lab
         </linearGradient>
       </defs>
 
-      {/* grid (horizontal + vertical) */}
       {[0.2, 0.4, 0.6, 0.8].map((p) => (
         <line
           key={`h_${p}`}
@@ -697,24 +772,8 @@ function MiniAreaChart({ data, max, labels }: { data: number[]; max: number; lab
 
       {ptsArr.length > 0 && (
         <>
-          {/* filled area */}
-          <polyline
-            points={`${pts} ${w - pad},${h - pad} ${pad},${h - pad}`}
-            fill="url(#flowArea)"
-            stroke="none"
-          />
-
-          {/* line */}
-          <polyline
-            points={pts}
-            fill="none"
-            stroke="rgba(59,130,246,0.9)"
-            strokeWidth="2.5"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-
-          {/* points */}
+          <polyline points={`${pts} ${w - pad},${h - pad} ${pad},${h - pad}`} fill="url(#flowArea)" stroke="none" />
+          <polyline points={pts} fill="none" stroke="rgba(59,130,246,0.9)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
           {ptsArr.map((p, i) => (
             <circle
               key={i}
@@ -728,22 +787,12 @@ function MiniAreaChart({ data, max, labels }: { data: number[]; max: number; lab
         </>
       )}
 
-      {/* hover crosshair + tooltip */}
       {hover ? (
         <>
-          <line
-            x1={hover.x}
-            x2={hover.x}
-            y1={pad}
-            y2={h - pad}
-            stroke="rgba(255,255,255,0.14)"
-            strokeWidth="1"
-          />
-
+          <line x1={hover.x} x2={hover.x} y1={pad} y2={h - pad} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
           <circle cx={hover.x} cy={hover.y} r={6} fill="rgba(255,255,255,0.12)" />
           <circle cx={hover.x} cy={hover.y} r={3.2} fill="rgba(255,255,255,0.95)" />
 
-          {/* tooltip */}
           <g>
             {(() => {
               const bw = 172
@@ -754,15 +803,7 @@ function MiniAreaChart({ data, max, labels }: { data: number[]; max: number; lab
 
               return (
                 <>
-                  <rect
-                    x={x}
-                    y={y}
-                    width={bw}
-                    height={bh}
-                    rx={10}
-                    fill="rgba(11,15,26,0.92)"
-                    stroke="rgba(255,255,255,0.10)"
-                  />
+                  <rect x={x} y={y} width={bw} height={bh} rx={10} fill="rgba(11,15,26,0.92)" stroke="rgba(255,255,255,0.10)" />
                   <text x={x + 12} y={y + 20} fill="rgba(255,255,255,0.75)" fontSize="11">
                     {dayLabel}
                   </text>
