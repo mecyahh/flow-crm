@@ -39,6 +39,7 @@ type ProductRow = {
   product_name: string
   sort_order: number | null
   is_active: boolean | null
+  created_at?: string
 }
 
 const THEMES = [
@@ -96,7 +97,7 @@ export default function SettingsPage() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
-    // Agents
+  // Agents
   const [agents, setAgents] = useState<Profile[]>([])
   const [loadingAgents, setLoadingAgents] = useState(false)
   const [refreshingAgents, setRefreshingAgents] = useState(false)
@@ -185,11 +186,10 @@ export default function SettingsPage() {
   const isOwner = !!me?.is_agency_owner
   const canManageAgents = !!(isAdmin || isOwner)
 
-  // ✅ subtree helper (fixes missing buildTreeIds)
+  // ✅ replaces missing buildTreeIds; returns me + descendants
   function buildSubtreeIds(rootId: string, all: Profile[]) {
-    const ids = new Set<string>()
+    const ids = new Set<string>([rootId])
     const q: string[] = [rootId]
-    ids.add(rootId)
 
     while (q.length) {
       const cur = q.shift()!
@@ -200,7 +200,6 @@ export default function SettingsPage() {
         }
       }
     }
-
     return Array.from(ids)
   }
 
@@ -237,7 +236,7 @@ export default function SettingsPage() {
       setPTheme(p.theme || 'blue')
       setAvatarPreview(p.avatar_url || '')
 
-      // ✅ IMPORTANT: loadAgents must use p.id (state update is async)
+      // ✅ IMPORTANT: use p.id (state setMe is async)
       if (p.role === 'admin' || !!p.is_agency_owner) {
         await loadAgents(p.id)
         setTab('agents')
@@ -302,7 +301,6 @@ export default function SettingsPage() {
     })
   }
 
-  // ✅ loadAgents now accepts rootId so boot() can scope correctly
   async function loadAgents(rootId?: string) {
     setLoadingAgents(true)
     try {
@@ -394,6 +392,7 @@ export default function SettingsPage() {
   }
 
   async function inviteAgent() {
+    // ✅ run() overwrites toasts — so return the pin & show it after
     const pin = await run<string | null>(setInviting, setToast, 'Invite created', async () => {
       const token = await authHeader()
       if (!token) throw new Error('Not logged in')
@@ -434,7 +433,6 @@ export default function SettingsPage() {
       return typeof json?.pin === 'string' ? json.pin : null
     })
 
-    // ✅ run() would overwrite the toast otherwise
     if (pin) setToast(`Invite created ✅ PIN: ${pin}`)
   }
 
@@ -704,19 +702,11 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="First Name">
-                <input
-                  className={inputCls}
-                  value={edit.first_name}
-                  onChange={(e) => setEdit((p) => ({ ...p, first_name: e.target.value }))}
-                />
+                <input className={inputCls} value={edit.first_name} onChange={(e) => setEdit((p) => ({ ...p, first_name: e.target.value }))} />
               </Field>
 
               <Field label="Last Name">
-                <input
-                  className={inputCls}
-                  value={edit.last_name}
-                  onChange={(e) => setEdit((p) => ({ ...p, last_name: e.target.value }))}
-                />
+                <input className={inputCls} value={edit.last_name} onChange={(e) => setEdit((p) => ({ ...p, last_name: e.target.value }))} />
               </Field>
 
               <Field label="Role">
@@ -739,11 +729,11 @@ export default function SettingsPage() {
 
               <Field label="Comp">
                 <select className={inputCls} value={String(edit.comp)} onChange={(e) => setEdit((p) => ({ ...p, comp: Number(e.target.value) }))}>
-                                    {COMP_VALUES.map((n) => (
-                      <option key={n} value={n}>
-                        {n}%
-                      </option>
-                    ))}
+                  {COMP_VALUES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}%
+                    </option>
+                  ))}
                 </select>
               </Field>
 
@@ -796,70 +786,35 @@ export default function SettingsPage() {
               </Field>
 
               <Field label="Supported Name">
-                <input
-                  className={inputCls}
-                  value={carrierEdit.supported_name}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, supported_name: e.target.value }))}
-                />
+                <input className={inputCls} value={carrierEdit.supported_name} onChange={(e) => setCarrierEdit((p) => ({ ...p, supported_name: e.target.value }))} />
               </Field>
 
               <Field label="Advance Rate">
-                <input
-                  className={inputCls}
-                  value={carrierEdit.advance_rate}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, advance_rate: e.target.value }))}
-                  placeholder="0.75"
-                />
+                <input className={inputCls} value={carrierEdit.advance_rate} onChange={(e) => setCarrierEdit((p) => ({ ...p, advance_rate: e.target.value }))} placeholder="0.75" />
               </Field>
 
               <Field label="Sort Order">
-                <input
-                  className={inputCls}
-                  value={carrierEdit.sort_order}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, sort_order: e.target.value }))}
-                  placeholder="10"
-                />
+                <input className={inputCls} value={carrierEdit.sort_order} onChange={(e) => setCarrierEdit((p) => ({ ...p, sort_order: e.target.value }))} placeholder="10" />
               </Field>
 
               <Field label="E-App URL">
-                <input
-                  className={inputCls}
-                  value={carrierEdit.eapp_url}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, eapp_url: e.target.value }))}
-                />
+                <input className={inputCls} value={carrierEdit.eapp_url} onChange={(e) => setCarrierEdit((p) => ({ ...p, eapp_url: e.target.value }))} />
               </Field>
 
               <Field label="Portal URL">
-                <input
-                  className={inputCls}
-                  value={carrierEdit.portal_url}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, portal_url: e.target.value }))}
-                />
+                <input className={inputCls} value={carrierEdit.portal_url} onChange={(e) => setCarrierEdit((p) => ({ ...p, portal_url: e.target.value }))} />
               </Field>
 
               <Field label="Support Phone">
-                <input
-                  className={inputCls}
-                  value={carrierEdit.support_phone}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, support_phone: e.target.value }))}
-                  placeholder="(888) 888-8888"
-                />
+                <input className={inputCls} value={carrierEdit.support_phone} onChange={(e) => setCarrierEdit((p) => ({ ...p, support_phone: e.target.value }))} placeholder="(888) 888-8888" />
               </Field>
 
               <Field label="Logo URL">
-                <input
-                  className={inputCls}
-                  value={carrierEdit.logo_url}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, logo_url: e.target.value }))}
-                />
+                <input className={inputCls} value={carrierEdit.logo_url} onChange={(e) => setCarrierEdit((p) => ({ ...p, logo_url: e.target.value }))} />
               </Field>
 
               <Field label="Active">
-                <select
-                  className={inputCls}
-                  value={carrierEdit.active ? 'yes' : 'no'}
-                  onChange={(e) => setCarrierEdit((p) => ({ ...p, active: e.target.value === 'yes' }))}
-                >
+                <select className={inputCls} value={carrierEdit.active ? 'yes' : 'no'} onChange={(e) => setCarrierEdit((p) => ({ ...p, active: e.target.value === 'yes' }))}>
                   <option value="yes">yes</option>
                   <option value="no">no</option>
                 </select>
@@ -896,21 +851,11 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <Field label="New Product Name">
-                <input
-                  className={inputCls}
-                  value={newProduct.product_name}
-                  onChange={(e) => setNewProduct((p) => ({ ...p, product_name: e.target.value }))}
-                  placeholder="Product name"
-                />
+                <input className={inputCls} value={newProduct.product_name} onChange={(e) => setNewProduct((p) => ({ ...p, product_name: e.target.value }))} placeholder="Product name" />
               </Field>
 
               <Field label="Sort Order">
-                <input
-                  className={inputCls}
-                  value={newProduct.sort_order}
-                  onChange={(e) => setNewProduct((p) => ({ ...p, sort_order: e.target.value }))}
-                  placeholder="10"
-                />
+                <input className={inputCls} value={newProduct.sort_order} onChange={(e) => setNewProduct((p) => ({ ...p, sort_order: e.target.value }))} placeholder="10" />
               </Field>
 
               <div className="flex items-end">
@@ -943,29 +888,27 @@ export default function SettingsPage() {
                           disabled={productsSaving}
                           className={[
                             'rounded-xl border px-3 py-2 text-xs font-semibold transition',
-                            active
-                              ? 'border-green-400/25 bg-green-500/10 text-green-200'
-                              : 'border-white/10 bg-white/5 text-[var(--muted)]',
+                            active ? 'border-green-400/25 bg-green-500/10 text-green-200' : 'border-white/10 bg-white/5 text-[var(--muted)]',
                           ].join(' ')}
                           title="Toggle active"
                         >
                           {active ? 'Active' : 'Off'}
                         </button>
                       </div>
-                     <div className="col-span-1 flex justify-end">
-  <button
-    onClick={() => deleteProduct(p)}
-    disabled={productsSaving}
-    className={[
-      'rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2',
-      'shadow-[0_0_0_1px_rgba(255,255,255,0.08)]',
-      productsSaving ? 'opacity-50 cursor-not-allowed' : '',
-    ].join(' ')}
-    title="Delete"
-  >
-    <TrashIcon />
-  </button>
-</div>
+                      <div className="col-span-1 flex justify-end">
+                        <button
+                          onClick={() => deleteProduct(p)}
+                          disabled={productsSaving}
+                          className={[
+                            'rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2',
+                            'shadow-[0_0_0_1px_rgba(255,255,255,0.08)]',
+                            productsSaving ? 'opacity-50 cursor-not-allowed' : '',
+                          ].join(' ')}
+                          title="Delete"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
@@ -1119,94 +1062,91 @@ export default function SettingsPage() {
               />
             </div>
 
+            {/* ✅ fixed col-span layout (no col-span-0) */}
             <div className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-[11px] text-[var(--muted)] bg-white/5">
-  <div className="col-span-3">Agent</div>
-  <div className="col-span-4">Email</div>
-  <div className="col-span-2 text-center">Role</div>
-  <div className="col-span-2">Upline</div>
-  <div className="col-span-1 text-right">Comp</div>
-  <div className="col-span-0 text-right" />
-</div>
-              {loadingAgents && <div className="px-4 py-6 text-sm text-[var(--muted)]">Loading…</div>}
-
-              {!loadingAgents &&
-                filteredAgents.map((a) => {
-                  const name = `${a.first_name || '—'} ${a.last_name || ''}`.trim()
-                  return (
-                    <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center hover:bg-white/5 transition">
-  <div className="col-span-3 font-semibold">
-    {name}
-    {a.is_agency_owner ? (
-      <span className="ml-2 text-[10px] px-2 py-1 rounded-xl bg-white/5 text-white/70 border border-white/10">
-        Owner
-      </span>
-    ) : null}
-    {a.role === 'admin' ? (
-      <span className="ml-2 text-[10px] px-2 py-1 rounded-xl bg-white/5 text-white/70 border border-white/10">
-        Admin
-      </span>
-    ) : null}
-  </div>
-
-  <div className="col-span-4 text-white/60">{a.email || '—'}</div>
-
-  <div className="col-span-2 text-center text-white/60">{a.role || 'agent'}</div>
-
-  <div className="col-span-2 text-white/60 truncate">
-    {a.upline_id ? (
-      <span className="px-2 py-1 rounded-xl bg-white/5 border border-white/10 text-[11px] text-white/70">
-        {(agents.find((x) => x.id === a.upline_id)?.first_name || '—')}{' '}
-        {(agents.find((x) => x.id === a.upline_id)?.last_name || '').trim()}
-      </span>
-    ) : (
-      '—'
-    )}
-  </div>
-
-  <div className="col-span-1 text-right text-white/60">{typeof a.comp === 'number' ? `${a.comp}%` : '—'}</div>
-
-  <div className="col-span-0 flex justify-end gap-2">
-    <button
-      type="button"
-      onClick={() => openEdit(a)}
-      className="rounded-xl bg-white/5 hover:bg-white/10 transition px-2.5 py-2 border border-white/10"
-      title="Edit"
-    >
-      <IconPencil />
-    </button>
-
-    <button
-      type="button"
-      onClick={async () => {
-        const ok = window.confirm(`Delete ${name}? This removes Auth + Profile.`)
-        if (!ok) return
-        try {
-          const token = await authHeader()
-          const res = await fetch('/api/admin/users/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: token },
-            body: JSON.stringify({ user_id: a.id }),
-          })
-          const json = await res.json().catch(() => ({}))
-          if (!res.ok) throw new Error(json.error || 'Delete failed')
-          setToast('User deleted ✅')
-          await loadAgents()
-        } catch (e: any) {
-          setToast(errMsg(e))
-        }
-      }}
-      className="rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2 border border-white/10"
-      title="Delete"
-    >
-      <IconTrash />
-    </button>
-  </div>
-</div>
-                  )
-                })}
-
-              {!loadingAgents && filteredAgents.length === 0 && <div className="px-4 py-6 text-sm text-[var(--muted)]">No agents.</div>}
+              <div className="col-span-3">Agent</div>
+              <div className="col-span-4">Email</div>
+              <div className="col-span-2 text-center">Role</div>
+              <div className="col-span-1">Upline</div>
+              <div className="col-span-1 text-right">Comp</div>
+              <div className="col-span-1 text-right">Actions</div>
             </div>
+
+            {loadingAgents && <div className="px-4 py-6 text-sm text-[var(--muted)]">Loading…</div>}
+
+            {!loadingAgents &&
+              filteredAgents.map((a) => {
+                const name = `${a.first_name || '—'} ${a.last_name || ''}`.trim()
+                const up = a.upline_id ? agents.find((x) => x.id === a.upline_id) : null
+
+                return (
+                  <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/10 text-sm items-center hover:bg-white/5 transition">
+                    <div className="col-span-3 font-semibold">
+                      {name}
+                      {a.is_agency_owner ? (
+                        <span className="ml-2 text-[10px] px-2 py-1 rounded-xl bg-white/5 text-white/70 border border-white/10">Owner</span>
+                      ) : null}
+                      {a.role === 'admin' ? (
+                        <span className="ml-2 text-[10px] px-2 py-1 rounded-xl bg-white/5 text-white/70 border border-white/10">Admin</span>
+                      ) : null}
+                    </div>
+
+                    <div className="col-span-4 text-white/60">{a.email || '—'}</div>
+                    <div className="col-span-2 text-center text-white/60">{a.role || 'agent'}</div>
+
+                    <div className="col-span-1 text-white/60 truncate">
+                      {up ? (
+                        <span className="px-2 py-1 rounded-xl bg-white/5 border border-white/10 text-[11px] text-white/70">
+                          {(up.first_name || '—') + ' ' + (up.last_name || '')}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </div>
+
+                    <div className="col-span-1 text-right text-white/60">{typeof a.comp === 'number' ? `${a.comp}%` : '—'}</div>
+
+                    <div className="col-span-1 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(a)}
+                        className="rounded-xl bg-white/5 hover:bg-white/10 transition px-2.5 py-2 border border-white/10"
+                        title="Edit"
+                      >
+                        <IconPencil />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = window.confirm(`Delete ${name}? This removes Auth + Profile.`)
+                          if (!ok) return
+                          try {
+                            const token = await authHeader()
+                            const res = await fetch('/api/admin/users/delete', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: token },
+                              body: JSON.stringify({ user_id: a.id }),
+                            })
+                            const json = await res.json().catch(() => ({}))
+                            if (!res.ok) throw new Error(json.error || 'Delete failed')
+                            setToast('User deleted ✅')
+                            await loadAgents()
+                          } catch (e: any) {
+                            setToast(errMsg(e))
+                          }
+                        }}
+                        className="rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2 border border-white/10"
+                        title="Delete"
+                      >
+                        <IconTrash />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+
+            {!loadingAgents && filteredAgents.length === 0 && <div className="px-4 py-6 text-sm text-[var(--muted)]">No agents.</div>}
 
             {/* INVITE MODAL */}
             {inviteOpen && (
@@ -1300,26 +1240,22 @@ export default function SettingsPage() {
           <div className="glass rounded-2xl border border-[var(--cardBorder)] p-6">
             <div className="text-sm font-semibold">Positions</div>
             <div className="text-xs text-[var(--muted)] mt-1">
-  Update upline + comp. <span className="text-white/60">All hierarchy changes take effect immediately.</span>
-</div>
+              Update upline + comp. <span className="text-white/60">All hierarchy changes take effect immediately.</span>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
               <Field label="Search User">
-  <SearchPick
-    placeholder="Type name or email…"
-    value={pos.user_id}
-    onChange={(id) => setPos((p) => ({ ...p, user_id: id }))}
-    options={uplineOptions}
-  />
-</Field>
+                <SearchPick placeholder="Type name or email…" value={pos.user_id} onChange={(id) => setPos((p) => ({ ...p, user_id: id }))} options={uplineOptions} />
+              </Field>
 
               <Field label="Search Upline">
-  <SearchPick
-    placeholder="Type upline name/email…"
-    value={pos.upline_id}
-    onChange={(id) => setPos((p) => ({ ...p, upline_id: id }))}
-    options={[{ id: '', label: '— No upline —' }, ...uplineOptions]}
-  />
-</Field>
+                <SearchPick
+                  placeholder="Type upline name/email…"
+                  value={pos.upline_id}
+                  onChange={(id) => setPos((p) => ({ ...p, upline_id: id }))}
+                  options={[{ id: '', label: '— No upline —' }, ...uplineOptions]}
+                />
+              </Field>
 
               <Field label="Comp">
                 <select className={inputCls} value={String(pos.comp)} onChange={(e) => setPos((p) => ({ ...p, comp: Number(e.target.value) }))}>
@@ -1407,23 +1343,23 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="col-span-1 flex justify-end gap-2">
-                     <button
-  type="button"
-  onClick={() => openCarrierEdit(c)}
-  className="rounded-xl bg-white/5 hover:bg-white/10 transition px-2.5 py-2 border border-white/10"
-  title="Edit"
->
-  <IconPencil />
-</button>
+                      <button
+                        type="button"
+                        onClick={() => openCarrierEdit(c)}
+                        className="rounded-xl bg-white/5 hover:bg-white/10 transition px-2.5 py-2 border border-white/10"
+                        title="Edit"
+                      >
+                        <IconPencil />
+                      </button>
 
                       <button
-  type="button"
-  onClick={() => deleteCarrier(c)}
-  className="rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2 border border-white/10"
-  title="Delete"
->
-  <IconTrash />
-</button>
+                        type="button"
+                        onClick={() => deleteCarrier(c)}
+                        className="rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2 border border-white/10"
+                        title="Delete"
+                      >
+                        <IconTrash />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1452,29 +1388,15 @@ export default function SettingsPage() {
                     </Field>
 
                     <Field label="Supported Name">
-                      <input
-                        className={inputCls}
-                        value={newCarrier.supported_name}
-                        onChange={(e) => setNewCarrier((p) => ({ ...p, supported_name: e.target.value }))}
-                      />
+                      <input className={inputCls} value={newCarrier.supported_name} onChange={(e) => setNewCarrier((p) => ({ ...p, supported_name: e.target.value }))} />
                     </Field>
 
                     <Field label="Advance Rate">
-                      <input
-                        className={inputCls}
-                        value={newCarrier.advance_rate}
-                        onChange={(e) => setNewCarrier((p) => ({ ...p, advance_rate: e.target.value }))}
-                        placeholder="0.75"
-                      />
+                      <input className={inputCls} value={newCarrier.advance_rate} onChange={(e) => setNewCarrier((p) => ({ ...p, advance_rate: e.target.value }))} placeholder="0.75" />
                     </Field>
 
                     <Field label="Sort Order (required)">
-                      <input
-                        className={inputCls}
-                        value={newCarrier.sort_order}
-                        onChange={(e) => setNewCarrier((p) => ({ ...p, sort_order: e.target.value }))}
-                        placeholder="10"
-                      />
+                      <input className={inputCls} value={newCarrier.sort_order} onChange={(e) => setNewCarrier((p) => ({ ...p, sort_order: e.target.value }))} placeholder="10" />
                     </Field>
 
                     <Field label="E-App URL">
@@ -1486,12 +1408,7 @@ export default function SettingsPage() {
                     </Field>
 
                     <Field label="Support Phone">
-                      <input
-                        className={inputCls}
-                        value={newCarrier.support_phone}
-                        onChange={(e) => setNewCarrier((p) => ({ ...p, support_phone: e.target.value }))}
-                        placeholder="(888) 888-8888"
-                      />
+                      <input className={inputCls} value={newCarrier.support_phone} onChange={(e) => setNewCarrier((p) => ({ ...p, support_phone: e.target.value }))} placeholder="(888) 888-8888" />
                     </Field>
 
                     <Field label="Logo URL">
@@ -1612,17 +1529,11 @@ const saveWide =
 
 const dangerBtn =
   'rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-2 text-sm font-semibold hover:bg-red-500/15 transition'
+
 function IconPencil() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white/80">
-      <path
-        d="M12 20h9"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.85"
-      />
+      <path d="M12 20h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
       <path
         d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"
         stroke="currentColor"
@@ -1633,15 +1544,10 @@ function IconPencil() {
     </svg>
   )
 }
+
 function TrashIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <path
         d="M9 3h6m-8 4h10m-9 0 .7 13.2A2 2 0 0 0 10.7 22h2.6a2 2 0 0 0 2-1.8L16 7"
         stroke="currentColor"
@@ -1650,79 +1556,18 @@ function TrashIcon({ className = 'h-4 w-4' }: { className?: string }) {
         strokeLinejoin="round"
         opacity="0.9"
       />
-      <path
-        d="M10 11v7M14 11v7"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        opacity="0.9"
-      />
-    </svg>
-  )
-}
-function IconTrash() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white/80">
-      <path
-        d="M3 6h18"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.9"
-      />
-      <path
-        d="M8 6V4h8v2"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.9"
-      />
-      <path
-        d="M19 6l-1 14H6L5 6"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M10 11v6M14 11v6"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.9"
-      />
+      <path d="M10 11v7M14 11v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity="0.9" />
     </svg>
   )
 }
 
-function IconCalendar() {
+function IconTrash() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white/80">
-      <path
-        d="M8 2v3M16 2v3"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M3 9h18"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.9"
-      />
-      <path
-        d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M3 6h18" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+      <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+      <path d="M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
     </svg>
   )
 }
