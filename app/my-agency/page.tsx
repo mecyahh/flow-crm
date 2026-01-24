@@ -1,4 +1,3 @@
-// ✅ REPLACE ENTIRE FILE: /app/my-agency/page.tsx
 'use client'
 
 export const dynamic = 'force-dynamic'
@@ -6,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useEffect, useMemo, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import FlowRangePicker from '../components/FlowRangePicker'
-import CarrierDonut from '../components/CarrierDonut'
+import AgentLegDonut from '../components/AgentLegDonut'
 import { supabase } from '@/lib/supabaseClient'
 
 type Profile = {
@@ -296,9 +295,12 @@ export default function MyAgencyPage() {
     return mine || { weeklyAP: 0, monthlyAP: 0 }
   }, [me, agentsAgg])
 
+  // ✅ LEG DONUT DISTRIBUTION (Direct downlines only)
+  // ✅ EXCLUDE legs unless the DIRECT downline has DOWNLINES producing in range
   const legDist = useMemo(() => {
     if (!me) return { labels: ['No Data'], values: [100] }
-    const directs = directIds.slice()
+
+    const directs = (directIds || []).slice()
     if (!directs.length) return { labels: ['No Data'], values: [100] }
 
     // Sum AP by user in current range
@@ -308,15 +310,23 @@ export default function MyAgencyPage() {
       apByUser.set(d.user_id, (apByUser.get(d.user_id) || 0) + Number(d.ap || 0))
     })
 
-    const rows: { label: string; ap: number }[] = directs.map((root) => {
-      const legIds = buildTreeIds(root, directory) // root + descendants
-      let ap = 0
-      legIds.forEach((uid) => {
-        ap += apByUser.get(uid) || 0
+    const rows: { label: string; ap: number }[] = directs
+      .map((root) => {
+        const legIdsAll = buildTreeIds(root, directory) // includes root + descendants
+        const legDownlineIds = legIdsAll.filter((id) => id !== root) // descendants only
+
+        let downlineAP = 0
+        legDownlineIds.forEach((uid) => {
+          downlineAP += apByUser.get(uid) || 0
+        })
+
+        // ✅ If none of their DOWNLINES are producing, exclude from donut
+        if (downlineAP <= 0) return null
+
+        const p = byId.get(root)
+        return { label: p ? displayName(p) : 'Agent', ap: downlineAP }
       })
-      const p = byId.get(root)
-      return { label: p ? displayName(p) : 'Agent', ap }
-    })
+      .filter(Boolean) as { label: string; ap: number }[]
 
     rows.sort((a, b) => b.ap - a.ap)
 
@@ -350,9 +360,7 @@ export default function MyAgencyPage() {
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">My Agency</h1>
-            <p className="text-sm text-white/60 mt-1">
-              {canSeeTree ? 'Detailed Agency View' : 'Your stats only.'}
-            </p>
+            <p className="text-sm text-white/60 mt-1">{canSeeTree ? 'Detailed Agency View' : 'Your stats only.'}</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -426,12 +434,18 @@ export default function MyAgencyPage() {
           </>
         )}
 
-        {/* Owner/admin view (tree only) */}
+        {/* Owner/admin view */}
         {canSeeTree && (
           <>
             <section className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <MiniStat label="Weekly Production (AP)" value={loading ? '—' : `$${formatMoney2(sum(agentsAgg, 'weeklyAP'))}`} />
-              <MiniStat label="Monthly Production (AP)" value={loading ? '—' : `$${formatMoney2(sum(agentsAgg, 'monthlyAP'))}`} />
+              <MiniStat
+                label="Weekly Production (AP)"
+                value={loading ? '—' : `$${formatMoney2(sum(agentsAgg, 'weeklyAP'))}`}
+              />
+              <MiniStat
+                label="Monthly Production (AP)"
+                value={loading ? '—' : `$${formatMoney2(sum(agentsAgg, 'monthlyAP'))}`}
+              />
               <MiniStat label="Writers" value={loading ? '—' : String(writersCount)} />
               <MiniStat label="New Writers" value={loading ? '—' : String(newWritersCount)} />
             </section>
@@ -439,7 +453,9 @@ export default function MyAgencyPage() {
             {isEmptyAgency && (
               <div className="glass rounded-2xl border border-white/10 p-6 mb-6">
                 <div className="text-sm font-semibold">You have not started building an agency yet</div>
-                <div className="text-xs text-white/55 mt-2">Add downlines under you to populate the directory and top producers.</div>
+                <div className="text-xs text-white/55 mt-2">
+                  Add downlines under you to populate the directory and top producers.
+                </div>
               </div>
             )}
 
@@ -469,16 +485,20 @@ export default function MyAgencyPage() {
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <div className="text-sm font-semibold">Leg Breakdown</div>
-                      <div className="text-xs text-white/55 mt-1">Direct downlines only • % of total AP.</div>
+                      <div className="text-xs text-white/55 mt-1">
+                        Direct downlines only • Excludes legs with no producing downlines.
+                      </div>
                     </div>
                     <span className="px-2 py-1 rounded-xl border border-white/10 bg-white/5 text-[11px] text-white/60">
                       Nice Work !
                     </span>
                   </div>
 
-                  <CarrierDonut labels={legDist.labels} values={legDist.values} glow />
+                  <AgentLegDonut labels={legDist.labels} values={legDist.values} glow />
+
                   <div className="mt-2 text-[11px] text-white/45">
-                    Each slice = a direct downline’s entire leg (them + everyone under them).
+                    Each slice = a direct downline’s producing downlines (only). If their downlines aren’t producing yet,
+                    they won’t appear.
                   </div>
                 </div>
               </div>
@@ -582,9 +602,6 @@ export default function MyAgencyPage() {
                 </table>
               </div>
             </div>
-
-            <div className="mt-3 text-[11px] text-white/45">
-            </div>
           </>
         )}
       </div>
@@ -595,7 +612,6 @@ export default function MyAgencyPage() {
 /* ---------------- helpers (isolated) ---------------- */
 
 function buildTreeIds(rootId: string, profiles: Profile[]) {
-  // BFS: root + all descendants via upline_id
   const children = new Map<string, string[]>()
   profiles.forEach((p) => {
     const up = p.upline_id || null
