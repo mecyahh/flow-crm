@@ -484,7 +484,7 @@ export default function MyAgencyPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <div className="text-sm font-semibold">Top Producers</div>
-                  <div className="text-xs text-white/55 mt-1">Left: Top 3.</div>
+                  <div className="text-xs text-white/55 mt-1">Top 3</div>
                 </div>
                 <span className="inline-flex items-center gap-2 text-[11px] text-white/55">
                   <span className="px-2 py-1 rounded-xl border border-white/10 bg-white/5">Persistency: Coming soon</span>
