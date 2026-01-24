@@ -921,16 +921,20 @@ if (json?.pin) {
                           {active ? 'Active' : 'Off'}
                         </button>
                       </div>
-                      <div className="col-span-1 flex justify-end">
-                        <button
-  onClick={() => deleteProduct(p)}
-  disabled={productsSaving}
-  className="rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2 border border-white/10"
-  title="Delete"
->
-  <IconTrash />
-</button>
-                      </div>
+                     <div className="col-span-1 flex justify-end">
+  <button
+    onClick={() => deleteProduct(p)}
+    disabled={productsSaving}
+    className={[
+      'rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2',
+      'shadow-[0_0_0_1px_rgba(255,255,255,0.08)]',
+      productsSaving ? 'opacity-50 cursor-not-allowed' : '',
+    ].join(' ')}
+    title="Delete"
+  >
+    <TrashIcon />
+  </button>
+</div>
                     </div>
                   )
                 })}
@@ -1598,7 +1602,33 @@ function IconPencil() {
     </svg>
   )
 }
-
+function TrashIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M9 3h6m-8 4h10m-9 0 .7 13.2A2 2 0 0 0 10.7 22h2.6a2 2 0 0 0 2-1.8L16 7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.9"
+      />
+      <path
+        d="M10 11v7M14 11v7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        opacity="0.9"
+      />
+    </svg>
+  )
+}
 function IconTrash() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-white/80">
