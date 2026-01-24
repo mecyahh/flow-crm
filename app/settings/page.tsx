@@ -637,7 +637,7 @@ if (json?.pin) {
     })
   }
 
-    async function deleteProduct(p: ProductRow) {
+  async function deleteProduct(p: ProductRow) {
     const ok = window.confirm(`Delete "${p.product_name}"?`)
     if (!ok) return
 
