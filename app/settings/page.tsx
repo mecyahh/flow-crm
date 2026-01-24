@@ -637,9 +637,10 @@ if (json?.pin) {
     })
   }
 
-  async function deleteProduct(p: ProductRow) {
+    async function deleteProduct(p: ProductRow) {
     const ok = window.confirm(`Delete "${p.product_name}"?`)
     if (!ok) return
+
     await run(setProductsSaving, setToast, 'Product deleted', async () => {
       const { error } = await supabase.from('carrier_products').delete().eq('id', p.id)
       if (error) throw error
