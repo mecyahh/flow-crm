@@ -1,7 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+
+function errMsg(e: any) {
+  return e?.message || e?.error_description || e?.error || 'Could not update password'
+}
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('')
@@ -9,28 +13,61 @@ export default function ResetPasswordPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
 
-  useEffect(() => {
-    // When user clicks the reset link, Supabase sets a recovery session in the URL hash.
-    // The supabase-js client will pick it up automatically in the browser.
-    ;(async () => {
-      const { data } = await supabase.auth.getSession()
-      setReady(!!data.session)
-      // If session isn't present yet, user may have opened on a different device/browser.
-      // They must open the link in the same browser OR you can use "PKCE" style flows later.
-    })()
+  // Support PKCE reset links (?code=...)
+  const code = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    const u = new URL(window.location.href)
+    return u.searchParams.get('code') || ''
   }, [])
+
+  useEffect(() => {
+    // ✅ Same behavior as before (session-based), but now also supports:
+    // - PKCE links via ?code=
+    // - Hash token links via #access_token / #refresh_token
+    ;(async () => {
+      try {
+        // 1) PKCE flow
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) throw error
+        }
+
+        // 2) Hash token flow (older recovery style)
+        if (typeof window !== 'undefined' && window.location.hash?.includes('access_token=')) {
+          const hash = window.location.hash.replace(/^#/, '')
+          const params = new URLSearchParams(hash)
+          const access_token = params.get('access_token') || ''
+          const refresh_token = params.get('refresh_token') || ''
+
+          if (access_token && refresh_token) {
+            const { error } = await supabase.auth.setSession({ access_token, refresh_token })
+            if (error) throw error
+          }
+        }
+
+        // 3) Confirm session exists (same as yesterday)
+        const { data } = await supabase.auth.getSession()
+        setReady(!!data.session)
+      } catch (e: any) {
+        setReady(false)
+        setToast(errMsg(e))
+      }
+    })()
+  }, [code])
 
   async function updatePassword() {
     setBusy(true)
     setToast(null)
     try {
       if (password.length < 8) throw new Error('Password must be at least 8 characters')
+
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
+
       setToast('Password updated ✅ Redirecting…')
       setTimeout(() => (window.location.href = '/login'), 800)
     } catch (e: any) {
-      setToast(e?.message || 'Could not update password')
+      setToast(errMsg(e))
     } finally {
       setBusy(false)
     }
@@ -64,6 +101,7 @@ export default function ResetPasswordPage() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Minimum 8 characters"
             disabled={!ready}
+            autoComplete="new-password"
           />
         </div>
 
