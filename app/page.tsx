@@ -1,4 +1,3 @@
-// ✅ CREATE THIS FILE: /app/page.tsx
 'use client'
 
 import Link from 'next/link'
@@ -27,37 +26,43 @@ export default function MarketingHome() {
 
       {/* Top Nav */}
       <header className="sticky top-0 z-50">
-        <div
-          className={[
-            'mx-auto max-w-6xl px-6',
-            scrolled ? 'pt-4' : 'pt-6',
-          ].join(' ')}
-        >
+        <div className={['mx-auto max-w-6xl px-6', scrolled ? 'pt-4' : 'pt-6'].join(' ')}>
           <div
             className={[
-              'flex items-center justify-between rounded-3xl border border-white/10 backdrop-blur-xl',
+              'relative flex items-center rounded-3xl border border-white/10 backdrop-blur-xl',
               scrolled ? 'bg-[var(--card)]/70 shadow-2xl' : 'bg-transparent',
               'px-5 py-3 transition',
             ].join(' ')}
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center">
-                <span className="text-sm font-black tracking-tight">F</span>
-              </div>
-              <div className="leading-tight">
-                <div className="text-sm font-semibold tracking-tight">Flow</div>
-                <div className="text-[11px] text-white/55">YourFlowCRM</div>
+            {/* LEFT: nav links */}
+            <nav className="hidden md:flex items-center gap-6 text-sm text-white/70">
+              <a href="#features" className="hover:text-white transition">
+                Features
+              </a>
+              <a href="#how" className="hover:text-white transition">
+                How it works
+              </a>
+              <a href="#compliance" className="hover:text-white transition">
+                Compliance
+              </a>
+              <Link href="/login" className="hover:text-white transition">
+                Login
+              </Link>
+            </nav>
+
+            {/* CENTER: logo */}
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
+              {/* Semibold / Underline logo */}
+              <div className="logo-wrapper">
+                <span className="logo-text w-600 relative select-none">
+                  flow
+                  <span className="line-accent line-under" />
+                </span>
               </div>
             </div>
 
-            <nav className="hidden md:flex items-center gap-6 text-sm text-white/70">
-              <a href="#features" className="hover:text-white transition">Features</a>
-              <a href="#how" className="hover:text-white transition">How it works</a>
-              <a href="#compliance" className="hover:text-white transition">Compliance</a>
-              <Link href="/login" className="hover:text-white transition">Login</Link>
-            </nav>
-
-            <div className="flex items-center gap-2">
+            {/* RIGHT: CTAs */}
+            <div className="ml-auto flex items-center gap-2">
               <Link
                 href="/login"
                 className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold"
@@ -95,8 +100,8 @@ export default function MarketingHome() {
                 </h1>
 
                 <p className="text-sm text-white/60 mt-4 leading-relaxed">
-                  Submit business in seconds, track production in real time, isolate team performance, and automate reporting —
-                  all with a clean iOS-glass feel your agents will actually use.
+                  Submit business in seconds, track production in real time, isolate team performance, and automate reporting
+                  — all with a clean iOS-glass feel your agents will actually use.
                 </p>
 
                 <div className="mt-6 flex flex-col sm:flex-row gap-3">
