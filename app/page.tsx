@@ -24,63 +24,65 @@ export default function MarketingHome() {
         <div className="absolute top-[22%] right-[10%] h-[380px] w-[380px] rounded-full bg-cyan-400/10 blur-3xl" />
       </div>
 
-      {/* Top Nav */}
-      <header className="sticky top-0 z-50">
-        <div className={['mx-auto max-w-6xl px-6', scrolled ? 'pt-4' : 'pt-6'].join(' ')}>
-          <div
-            className={[
-              'relative flex items-center rounded-3xl border border-white/10 backdrop-blur-xl',
-              scrolled ? 'bg-[var(--card)]/70 shadow-2xl' : 'bg-transparent',
-              'px-5 py-3 transition',
-            ].join(' ')}
+     {/* Top Nav */}
+<header className="sticky top-0 z-50">
+  <div className={['mx-auto max-w-6xl px-6', scrolled ? 'pt-4' : 'pt-6'].join(' ')}>
+    <div
+      className={[
+        'rounded-3xl border border-white/10 backdrop-blur-xl',
+        scrolled ? 'bg-[var(--panel)]/70 shadow-2xl' : 'bg-transparent',
+        'px-5 py-3 transition',
+      ].join(' ')}
+    >
+      <div className="grid grid-cols-2 md:grid-cols-3 items-center gap-4">
+        {/* LEFT: nav */}
+        <div className="flex items-center gap-5 text-sm text-white/70">
+          <nav className="hidden md:flex items-center gap-6">
+            <a href="#features" className="hover:text-white transition">Features</a>
+            <a href="#how" className="hover:text-white transition">How it works</a>
+            <a href="#compliance" className="hover:text-white transition">Compliance</a>
+            <Link href="/login" className="hover:text-white transition">Login</Link>
+          </nav>
+
+          {/* mobile quick login */}
+          <Link
+            href="/login"
+            className="md:hidden rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
           >
-            {/* LEFT: nav links */}
-            <nav className="hidden md:flex items-center gap-6 text-sm text-white/70">
-              <a href="#features" className="hover:text-white transition">
-                Features
-              </a>
-              <a href="#how" className="hover:text-white transition">
-                How it works
-              </a>
-              <a href="#compliance" className="hover:text-white transition">
-                Compliance
-              </a>
-              <Link href="/login" className="hover:text-white transition">
-                Login
-              </Link>
-            </nav>
-
-            {/* CENTER: logo */}
-            <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
-              {/* Semibold / Underline logo */}
-              <div className="logo-wrapper">
-                <span className="logo-text w-600 relative select-none">
-                  flow
-                  <span className="line-accent line-under" />
-                </span>
-              </div>
-            </div>
-
-            {/* RIGHT: CTAs */}
-            <div className="ml-auto flex items-center gap-2">
-              <Link
-                href="/login"
-                className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold"
-              >
-                Login
-              </Link>
-              <a
-                href="mailto:support@mail.yourflowcrm.com?subject=Flow%20Demo%20Request"
-                className="rounded-2xl bg-[var(--accent)] hover:opacity-90 transition px-4 py-2 text-sm font-semibold"
-                style={{ color: 'var(--accentText)' as any }}
-              >
-                Request Demo
-              </a>
-            </div>
-          </div>
+            Login
+          </Link>
         </div>
-      </header>
 
+        {/* CENTER: logo (no overlap) */}
+        <div className="flex items-center justify-end md:justify-center">
+          <Link href="/" className="select-none">
+            <span className="text-xl font-semibold tracking-tight relative">
+              flow
+              <span className="absolute left-0 right-0 -bottom-1 h-[2px] bg-[var(--accent)] opacity-80 rounded-full" />
+            </span>
+          </Link>
+        </div>
+
+        {/* RIGHT: CTAs */}
+        <div className="hidden md:flex items-center justify-end gap-2">
+          <Link
+            href="/login"
+            className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-4 py-2 text-sm font-semibold"
+          >
+            Login
+          </Link>
+          <a
+            href="mailto:support@mail.yourflowcrm.com?subject=Flow%20Demo%20Request"
+            className="rounded-2xl bg-[var(--accent)] hover:opacity-90 transition px-4 py-2 text-sm font-semibold"
+            style={{ color: 'var(--accentText)' as any }}
+          >
+            Request Demo
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
       {/* Hero */}
       <main className="relative z-10">
         <section className="mx-auto max-w-6xl px-6 pt-10 pb-10">
