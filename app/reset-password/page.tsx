@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
 function errMsg(e: any) {
-  return e?.message || e?.error_description || e?.error || 'Could not update password'
+  return e?.message || e?.error_description || e?.error || 'Something failed'
 }
 
 export default function ResetPasswordPage() {
@@ -13,6 +13,10 @@ export default function ResetPasswordPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
 
+  // Resend reset
+  const [email, setEmail] = useState('')
+  const [resent, setResent] = useState(false)
+
   // Support PKCE reset links (?code=...)
   const code = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -20,8 +24,11 @@ export default function ResetPasswordPage() {
     return u.searchParams.get('code') || ''
   }, [])
 
+  const origin = useMemo(() => (typeof window !== 'undefined' ? window.location.origin : ''), [])
+  const resetUrl = useMemo(() => `${origin}/reset-password`, [origin])
+
   useEffect(() => {
-    // ✅ Same behavior as before (session-based), but now also supports:
+    // ✅ Same behavior as before (session-based), but also supports:
     // - PKCE links via ?code=
     // - Hash token links via #access_token / #refresh_token
     ;(async () => {
@@ -73,10 +80,43 @@ export default function ResetPasswordPage() {
     }
   }
 
+  async function resendReset() {
+    setToast(null)
+    setResent(false)
+
+    const em = email.trim().toLowerCase()
+    if (!em) return setToast('Enter your email to resend the reset link')
+
+    setBusy(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: resetUrl })
+      if (error) throw error
+      setResent(true)
+      setToast('Reset email sent ✅ Check your inbox.')
+    } catch (e: any) {
+      setToast(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const disabled = busy
+
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex items-center justify-center px-4">
       <div className="w-full max-w-md glass rounded-2xl border border-white/10 p-6">
-        <h1 className="text-2xl font-semibold">Reset password</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-semibold">Reset password</h1>
+
+          {/* ✅ Back to login */}
+          <button
+            type="button"
+            onClick={() => (window.location.href = '/login')}
+            className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-xs font-semibold"
+          >
+            Back to Login
+          </button>
+        </div>
 
         {!ready ? (
           <p className="text-sm text-white/60 mt-3">
@@ -92,26 +132,73 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
-        <div className="mt-5">
-          <label className="text-[11px] text-white/60">New Password</label>
-          <input
-            type="password"
-            className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/10"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Minimum 8 characters"
-            disabled={!ready}
-            autoComplete="new-password"
-          />
-        </div>
+        {/* ✅ If session is NOT ready, show resend block (no dead ends) */}
+        {!ready && (
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="text-sm font-semibold">Resend reset link</div>
+            <div className="text-xs text-white/60 mt-1">
+              Enter your email and we’ll send a fresh reset link.
+            </div>
 
-        <button
-          onClick={updatePassword}
-          disabled={busy || !ready}
-          className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-semibold transition bg-[var(--accent)] text-[var(--accentText)] hover:opacity-90 disabled:opacity-50"
-        >
-          {busy ? 'Saving…' : 'Update password'}
-        </button>
+            <div className="mt-3">
+              <label className="text-[11px] text-white/60">Email</label>
+              <input
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/10"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                autoComplete="email"
+                inputMode="email"
+                disabled={disabled}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={resendReset}
+              disabled={disabled}
+              className="mt-4 w-full rounded-2xl px-4 py-3 text-sm font-semibold transition bg-[var(--accent)] text-[var(--accentText)] hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? 'Sending…' : 'Send reset email'}
+            </button>
+
+            {resent && (
+              <div className="mt-3 text-[11px] text-white/60">
+                If you don’t see it, check Spam/Promotions.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ✅ If session IS ready, show password update */}
+        {ready && (
+          <>
+            <div className="mt-5">
+              <label className="text-[11px] text-white/60">New Password</label>
+              <input
+                type="password"
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/10"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                disabled={!ready || disabled}
+                autoComplete="new-password"
+              />
+            </div>
+
+            <button
+              onClick={updatePassword}
+              disabled={busy || !ready}
+              className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-semibold transition bg-[var(--accent)] text-[var(--accentText)] hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? 'Saving…' : 'Update password'}
+            </button>
+
+            <div className="mt-3 text-[11px] text-white/55">
+              After saving, you’ll be routed back to login automatically.
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
