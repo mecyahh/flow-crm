@@ -1,37 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'
 
-// ✅ Lazy admin client (prevents build-time crash)
-function getSupabaseAdmin() {
-  const supabaseUrl =
-    process.env.SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) return null
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-}
-
 export async function POST(req: Request) {
   try {
-    const supabaseAdmin = getSupabaseAdmin()
-    if (!supabaseAdmin) {
-      return NextResponse.json(
-        {
-          error:
-            'Missing env vars for Supabase admin. Set SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY.',
-        },
-        { status: 500 }
-      )
-    }
-
     const body = await req.json()
 
     const email = String(body.email || '').trim().toLowerCase()
@@ -51,14 +24,19 @@ export async function POST(req: Request) {
     }
 
     // 🔐 determine correct redirect (NO localhost)
-    const redirectTo = process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/login` : undefined
+    const redirectTo = process.env.NEXT_PUBLIC_APP_URL
+      ? `${process.env.NEXT_PUBLIC_APP_URL}/login`
+      : undefined
+
+    const supabaseAdmin = getSupabaseAdmin()
 
     // 1️⃣ Create auth user (no password yet)
-    const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      email_confirm: false,
-      user_metadata: { first_name, last_name },
-    })
+    const { data: created, error: createErr } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        email_confirm: false,
+        user_metadata: { first_name, last_name },
+      })
 
     if (createErr) {
       return NextResponse.json({ error: createErr.message }, { status: 400 })
@@ -70,30 +48,33 @@ export async function POST(req: Request) {
     }
 
     // 2️⃣ Send invite email (magic link → LIVE SITE)
-    const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-      data: { first_name, last_name },
-    })
+    const { error: inviteErr } =
+      await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo,
+        data: { first_name, last_name },
+      })
 
     if (inviteErr) {
       return NextResponse.json({ error: inviteErr.message }, { status: 400 })
     }
 
     // 3️⃣ Create / upsert profile so hierarchy + comp stick
-    const { error: profErr } = await supabaseAdmin.from('profiles').upsert(
-      {
-        id: userId,
-        email,
-        first_name,
-        last_name,
-        role,
-        is_agency_owner,
-        comp,
-        upline_id,
-        theme,
-      },
-      { onConflict: 'id' }
-    )
+    const { error: profErr } = await supabaseAdmin
+      .from('profiles')
+      .upsert(
+        {
+          id: userId,
+          email,
+          first_name,
+          last_name,
+          role,
+          is_agency_owner,
+          comp,
+          upline_id,
+          theme,
+        },
+        { onConflict: 'id' }
+      )
 
     if (profErr) {
       return NextResponse.json({ error: profErr.message }, { status: 400 })
@@ -101,6 +82,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Invite failed' }, { status: 500 })
+    return NextResponse.json(
+      { error: e?.message || 'Invite failed' },
+      { status: 500 }
+    )
   }
 }
