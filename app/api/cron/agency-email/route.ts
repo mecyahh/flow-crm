@@ -1,16 +1,15 @@
-// ✅ CREATE THIS FILE: /app/api/cron/agency-email/route.ts
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const CRON_SECRET = process.env.CRON_SECRET!
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const CRON_SECRET = process.env.CRON_SECRET || ''
 
 // Resend (Vercel integration provides RESEND_API_KEY)
-const RESEND_API_KEY = process.env.RESEND_API_KEY!
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
 
 // Use your verified sender domain (change if you prefer a different From)
 const EMAIL_FROM = process.env.AGENCY_REPORT_FROM || 'Flow <support@mail.yourflowcrm.com>'
@@ -51,7 +50,6 @@ function shortName(first: string | null, last: string | null, email: string | nu
 // --- Time helpers (America/New_York local day) ---
 
 function getNYOffsetMinutes(at: Date) {
-  // Node 18+ supports shortOffset like "GMT-5"
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     timeZoneName: 'shortOffset',
@@ -59,7 +57,6 @@ function getNYOffsetMinutes(at: Date) {
   })
   const parts = fmt.formatToParts(at)
   const tz = parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT+0'
-  // tz examples: "GMT-5", "GMT-04"
   const m = tz.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/)
   if (!m) return 0
   const sign = m[1] === '-' ? -1 : 1
@@ -86,7 +83,6 @@ function nyDayBoundsUTC(now = new Date()) {
   const { y, m, d } = nyYMD(now)
   const offsetMin = getNYOffsetMinutes(now)
 
-  // Construct local-midnight with correct offset, then Date parses into UTC
   const sign = offsetMin < 0 ? '-' : '+'
   const abs = Math.abs(offsetMin)
   const hh = String(Math.floor(abs / 60)).padStart(2, '0')
@@ -235,8 +231,12 @@ function buildEmailHtml(ownerName: string, dateLabel: string, rows: { name: stri
 
 export async function GET(req: Request) {
   try {
-    // Protect cron route
-    const secret = req.headers.get('x-cron-secret') || ''
+    // ✅ Protect cron route (supports Vercel Cron query param)
+    const url = new URL(req.url)
+    const secretQ = url.searchParams.get('secret') || ''
+    const secretH = req.headers.get('x-cron-secret') || ''
+    const secret = secretQ || secretH
+
     if (!CRON_SECRET || secret !== CRON_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -275,8 +275,7 @@ export async function GET(req: Request) {
     // Pull today’s deals once (for everyone), then slice per owner by teamIds
     const { data: deals, error: dErr } = await admin
       .from('deals')
-      // IMPORTANT: your schema uses user_id (dashboard) or agent_id (analytics)
-      // We'll try both safely by selecting both columns (one may be null depending on your table).
+      // supports either user_id or agent_id
       .select('user_id,agent_id,premium,created_at')
       .gte('created_at', startISO)
       .lt('created_at', endISO)
@@ -324,7 +323,6 @@ export async function GET(req: Request) {
       })
 
       const total = Array.from(sums.values()).reduce((s, v) => s + v, 0)
-
       const ownerName = shortName(owner.first_name, owner.last_name, owner.email)
 
       const subject = `My agency numbers · ${dateLabel}`
@@ -340,7 +338,7 @@ export async function GET(req: Request) {
           html,
         })
         sent++
-        results.push({ owner: ownerEmail, ok: true, teamSize: teamIds.length, deals: (deals || []).length })
+        results.push({ owner: ownerEmail, ok: true, teamSize: teamIds.length })
       } catch (e: any) {
         results.push({ owner: ownerEmail, ok: false, error: e?.message || 'send failed' })
       }
