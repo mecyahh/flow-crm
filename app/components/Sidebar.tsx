@@ -28,17 +28,9 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
 
-  // ✅ Hide sidebar on auth + marketing/legal screens (add-only; does not affect app routes)
+  // ✅ Hide sidebar on auth screens
   const hideOnRoutes = useMemo(() => {
-    const HIDE = [
-      '/',
-      '/login',
-      '/signup',
-      '/forgot-password',
-      '/reset-password',
-      '/terms',
-      '/privacy',
-    ]
+    const HIDE = ['/login', '/signup', '/forgot-password', '/reset-password']
     return HIDE.some((r) => pathname === r || pathname.startsWith(r + '/'))
   }, [pathname])
 
@@ -46,8 +38,13 @@ export default function Sidebar() {
   const [authed, setAuthed] = useState(false)
   const [me, setMe] = useState<Me | null>(null)
 
-  // ✅ Mobile drawer state (desktop stays always-visible)
-  const [openMobile, setOpenMobile] = useState(false)
+  // ✅ MOBILE: off-canvas open state
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  // ✅ Close sidebar when route changes (mobile)
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     let alive = true
@@ -80,9 +77,7 @@ export default function Sidebar() {
           email = String((prof as any).email || email || '')
           avatarUrl = String((prof as any).avatar_url || '')
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
 
       const meta: any = u.user_metadata || {}
       if (!avatarUrl) avatarUrl = String(meta.avatar_url || meta.picture || meta.photoURL || '')
@@ -91,12 +86,7 @@ export default function Sidebar() {
       const name = fullName || (email ? email.split('@')[0] : 'Agent')
 
       if (!alive) return
-      setMe({
-        id: u.id,
-        name,
-        email: email || '',
-        avatarUrl,
-      })
+      setMe({ id: u.id, name, email: email || '', avatarUrl })
       setReady(true)
     }
 
@@ -122,11 +112,6 @@ export default function Sidebar() {
     }
   }, [])
 
-  // ✅ Close mobile drawer when route changes
-  useEffect(() => {
-    setOpenMobile(false)
-  }, [pathname])
-
   const initials = useMemo(() => {
     const n = (me?.name || '').trim()
     if (!n) return 'A'
@@ -148,54 +133,39 @@ export default function Sidebar() {
   if (!ready) return null
   if (!authed) return null
 
+  // ✅ MOBILE hamburger button (does NOT affect desktop)
+  const MobileButton = (
+    <button
+      onClick={() => setMobileOpen(true)}
+      className="md:hidden fixed left-4 top-4 z-[60] rounded-2xl border border-white/10 bg-[#070a12]/85 backdrop-blur-xl px-4 py-2 text-sm font-semibold text-white/90"
+    >
+      Menu
+    </button>
+  )
+
   return (
     <>
-      {/* ✅ Mobile: floating open button */}
-      <button
-        type="button"
-        onClick={() => setOpenMobile(true)}
-        className={[
-          'md:hidden fixed left-4 top-4 z-[60]',
-          'rounded-2xl border border-white/10 bg-[#070a12]/80 backdrop-blur-xl',
-          'px-3 py-2 text-[12px] font-semibold text-white/85',
-        ].join(' ')}
-        aria-label="Open menu"
-      >
-        ☰ Menu
-      </button>
+      {MobileButton}
 
-      {/* ✅ Mobile backdrop */}
+      {/* ✅ MOBILE backdrop */}
       <div
+        onClick={() => setMobileOpen(false)}
         className={[
-          'md:hidden fixed inset-0 z-[55] transition',
-          openMobile ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
+          'md:hidden fixed inset-0 z-50 transition',
+          mobileOpen ? 'bg-black/55' : 'pointer-events-none bg-transparent',
         ].join(' ')}
-        onClick={() => setOpenMobile(false)}
-        style={{ background: 'rgba(0,0,0,0.55)' }}
       />
 
       <aside
         className={[
-          // base
-          'fixed left-0 top-0 z-[70] h-screen w-72 p-6 border-r border-white/10 bg-[#070a12]/92 backdrop-blur-xl',
-          // desktop unchanged
-          'md:translate-x-0 md:opacity-100 md:pointer-events-auto',
-          // mobile drawer
-          openMobile ? 'translate-x-0 opacity-100 pointer-events-auto' : '-translate-x-full opacity-100 pointer-events-auto',
-          'transition-transform duration-200',
+          'fixed left-0 top-0 z-[55] h-screen w-72 p-6 border-r border-white/10 bg-[#070a12]/92 backdrop-blur-xl',
+          // ✅ DESKTOP: always visible as before
+          'md:translate-x-0 md:transition-none',
+          // ✅ MOBILE: off-canvas slide
+          'transition-transform duration-200 ease-out md:duration-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         ].join(' ')}
       >
-        {/* Mobile close */}
-        <div className="md:hidden flex justify-end -mt-1 mb-2">
-          <button
-            type="button"
-            onClick={() => setOpenMobile(false)}
-            className="rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition px-3 py-2 text-[12px] font-semibold text-white/85"
-          >
-            Close
-          </button>
-        </div>
-
         {/* Header */}
         <div className="mb-7 flex items-center gap-4">
           <div className="relative h-20 w-20 rounded-full overflow-hidden border border-white/10 bg-white/5">
@@ -241,6 +211,7 @@ export default function Sidebar() {
                     ? 'bg-white/10 border-white/15'
                     : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/10',
                 ].join(' ')}
+                onClick={() => setMobileOpen(false)}
               >
                 <span className="text-white/90">{item.label}</span>
                 {active ? (
