@@ -1,13 +1,12 @@
-// ✅ REPLACE ENTIRE FILE: /app/api/cron/leaderboard/route.ts
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL!
-const CRON_SECRET = process.env.CRON_SECRET!
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || ''
+const CRON_SECRET = process.env.CRON_SECRET || ''
 
 function fmtMoney0(n: number) {
   const v = Math.round(Number(n || 0))
@@ -42,9 +41,6 @@ function shortName(first: string | null, last: string | null, email: string | nu
   return 'Agent'
 }
 
-/**
- * Get YYYY-MM-DD for "now" in a specific timezone, reliably.
- */
 function ymdInTZ(d: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -57,10 +53,6 @@ function ymdInTZ(d: Date, timeZone: string) {
   return { y: Number(get('year')), m: Number(get('month')), day: Number(get('day')) }
 }
 
-/**
- * Returns GMT offset minutes for a given date in a timezone (DST-safe),
- * using timeZoneName: 'shortOffset' (e.g., "GMT-5").
- */
 function tzOffsetMinutes(d: Date, timeZone: string) {
   const s = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -70,7 +62,6 @@ function tzOffsetMinutes(d: Date, timeZone: string) {
     second: '2-digit',
   }).format(d)
 
-  // Example contains "... GMT-5" or "... GMT-05:00"
   const m = s.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/)
   if (!m) return 0
   const hh = Number(m[1])
@@ -78,17 +69,11 @@ function tzOffsetMinutes(d: Date, timeZone: string) {
   return hh * 60 + (hh >= 0 ? mm : -mm)
 }
 
-/**
- * Compute the UTC Date for local midnight in a timezone (DST-safe).
- * We do a small iterative correction so DST edges behave.
- */
 function startOfDayTZ(now: Date, timeZone: string) {
   const { y, m, day } = ymdInTZ(now, timeZone)
 
-  // first guess: UTC midnight for that Y/M/D
   let guess = new Date(Date.UTC(y, m - 1, day, 0, 0, 0))
 
-  // correct with timezone offset at that local midnight
   for (let i = 0; i < 3; i++) {
     const offMin = tzOffsetMinutes(guess, timeZone)
     const corrected = new Date(Date.UTC(y, m - 1, day, 0, 0, 0) - offMin * 60 * 1000)
@@ -129,7 +114,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing CRON_SECRET' }, { status: 500 })
     }
 
-    // ✅ Protect cron route (Vercel cron can’t send headers, so we allow query param)
+    // ✅ Protect cron route (Vercel cron uses query param)
     const url = new URL(req.url)
     const secretQ = url.searchParams.get('secret') || ''
     const secretH = req.headers.get('x-cron-secret') || ''
@@ -140,12 +125,10 @@ export async function GET(req: Request) {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    // ✅ Daily scoreboard for New York day (DST-safe)
     const now = new Date()
     const dayStartNY = startOfDayTZ(now, 'America/New_York')
     const dayEndNY = addDays(dayStartNY, 1)
 
-    // ✅ pull today’s deals (supports either user_id or agent_id)
     const { data: deals, error: dErr } = await admin
       .from('deals')
       .select('user_id,agent_id,premium,created_at')
@@ -167,12 +150,8 @@ export async function GET(req: Request) {
     const sorted = Array.from(sums.entries()).sort((a, b) => b[1] - a[1])
     const ids = sorted.map(([id]) => id)
 
-    // Profiles for names (top 200 is plenty)
     const { data: profiles } = ids.length
-      ? await admin
-          .from('profiles')
-          .select('id,first_name,last_name,email')
-          .in('id', ids.slice(0, 200))
+      ? await admin.from('profiles').select('id,first_name,last_name,email').in('id', ids.slice(0, 200))
       : { data: [] as any[] }
 
     const pmap = new Map<string, any>()
@@ -186,18 +165,15 @@ export async function GET(req: Request) {
     const lines: string[] = []
     lines.push(header)
 
-    // ✅ If no deals today, still post cleanly
     if (!sorted.length) {
       lines.push('No production posted yet today.')
       lines.push(`TOTAL AP: $0`)
     } else {
-      // Post up to 50 (Discord message safe). Adjust if you want more/less.
       sorted.slice(0, 50).forEach(([id, ap]) => {
         const p = pmap.get(String(id))
         const nm = shortName(p?.first_name ?? null, p?.last_name ?? null, p?.email ?? null)
         lines.push(`${nm} - $${fmtMoney0(ap)}`)
       })
-
       lines.push(`TOTAL AP: $${fmtMoney0(total)}`)
     }
 
