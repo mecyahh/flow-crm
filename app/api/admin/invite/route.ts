@@ -51,23 +51,22 @@ export async function POST(req: Request) {
     if (inviteErr) return NextResponse.json({ error: inviteErr.message }, { status: 400 })
 
     // 3️⃣ Create / upsert profile so hierarchy + comp stick
-    const { error: profErr } = await supabaseAdmin
-      .from('profiles')
-      .upsert(
-        {
-          id: userId,
-          email,
-          first_name,
-          last_name,
-          role,
-          is_agency_owner,
-          comp,
-          upline_id,
-          theme,
-        },
-        { onConflict: 'id' }
-      )
+const payload: any = {
+  id: userId,
+  email,
+  first_name,
+  last_name,
+  role,
+  is_agency_owner,
+  comp,
+  upline_id,
+  theme,
+}
 
+const { error: profErr } = await supabaseAdmin
+  .from('profiles')
+  .upsert(payload, { onConflict: 'id' })
+    
     if (profErr) return NextResponse.json({ error: profErr.message }, { status: 400 })
 
     return NextResponse.json({ ok: true })
