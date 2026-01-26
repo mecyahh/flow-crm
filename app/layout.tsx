@@ -1,3 +1,4 @@
+// ✅ REPLACE ENTIRE FILE: /app/layout.tsx
 import './globals.css'
 import Sidebar from './components/Sidebar'
 import type { Metadata, Viewport } from 'next'
@@ -32,8 +33,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* ✅ Sidebar is global + fixed overlay */}
         <Sidebar />
 
-        {/* ✅ Content stays full width */}
-        <main className="min-h-screen w-full">{children}</main>
+        {/* ✅ KEY FIX:
+            - Uses CSS var set by Sidebar to offset content on desktop only
+            - On mobile it stays 0 so content fills the full screen */}
+        <main className="min-h-screen w-full pl-[var(--sidebar-offset)] transition-[padding] duration-200">
+          {children}
+        </main>
       </body>
     </html>
   )
