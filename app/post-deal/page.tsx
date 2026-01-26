@@ -276,8 +276,7 @@ export default function PostDealPage() {
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-white">
-      <Sidebar />
-
+      
       {confettiOn && <ConfettiBurst key={confettiKeyRef.current} durationMs={2600} />}
 
       {toast && (
