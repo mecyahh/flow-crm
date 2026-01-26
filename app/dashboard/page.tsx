@@ -3,7 +3,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import Sidebar from '../components/Sidebar'
 import FlowLineChart from '../components/FlowLineChart'
 import FlowRangePicker from '../components/FlowRangePicker'
 import FlowDatePicker from '../components/FlowDatePicker'
@@ -518,7 +517,6 @@ const lineValues = useMemo(() => last7.map((x) => x.ap), [last7])
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <Sidebar />
 
       {/* GOALS MODAL */}
       {goalsOpen && (
@@ -569,7 +567,7 @@ const lineValues = useMemo(() => last7.map((x) => x.ap), [last7])
         </div>
       )}
 
-      <div className="ml-64">
+      <div>
         <header className="px-10 pt-10 pb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
