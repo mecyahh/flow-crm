@@ -1,20 +1,33 @@
-import { createClient } from '@supabase/supabase-js'
+// ✅ REPLACE ENTIRE FILE: /lib/supabaseAdmin.ts
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-let _admin: ReturnType<typeof createClient> | null = null
+let cached: SupabaseClient | null = null
 
 export function getSupabaseAdmin() {
-  if (_admin) return _admin
+  if (cached) return cached
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const service = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  // ✅ Only throw when the route actually runs (NOT during build import)
-  if (!url) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required')
-  if (!service) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required')
+  // Important: don't create at import time unless env is present.
+  if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
+  if (!service) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
 
-  _admin = createClient(url, service, {
+  cached = createClient(url, service, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  return _admin
+  return cached
 }
+
+// ✅ Backwards compatible export used across existing routes.
+//    This is a Proxy that lazily creates the client ONLY when a property is accessed.
+export const supabaseAdmin = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const client = getSupabaseAdmin() as any
+      return client[prop]
+    },
+  }
+) as unknown as SupabaseClient
