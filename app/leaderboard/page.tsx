@@ -214,7 +214,7 @@ const weekRange = useMemo(() => {
         .crown-anim { animation: crownPop 1.8s ease-in-out infinite; }
       `}</style>
 
-      <div className="ml-64 px-10 py-10">
+      <div className="w-full min-w-0 px-4 py-6 md:px-10 md:py-10">
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
