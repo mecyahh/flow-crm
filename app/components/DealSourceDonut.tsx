@@ -1,4 +1,3 @@
-// ✅ CREATE NEW FILE: /app/components/DealSourceDonut.tsx
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
@@ -6,6 +5,9 @@ import { Chart as ChartJS, ArcElement, Tooltip } from 'chart.js'
 import { Doughnut } from 'react-chartjs-2'
 
 ChartJS.register(ArcElement, Tooltip)
+
+const SOURCE_ORDER = ['Inbound', 'Readymode', 'Referral', 'Warm-Market'] as const
+type SourceName = (typeof SOURCE_ORDER)[number]
 
 export default function DealSourceDonut({
   labels,
@@ -16,19 +18,39 @@ export default function DealSourceDonut({
   values: number[]
   glow?: boolean
 }) {
-  const safeLabels = (labels && labels.length ? labels : ['No Data']).slice(0, 6)
-  const safeValues = (values && values.length ? values : [100]).slice(0, 6)
-
-  // ✅ same palette
-  const palette = useMemo(
-    () => [
-      '#3700FF', // Electric Indigo
-      '#44FF07', // Harlequin Green
-      '#FB13F3', // Neon Fuchsia
-      '#FF6B45', // Bright Orange
-    ],
+  // ✅ lock colors to your sources in the same order
+  const colorBySource: Record<SourceName, string> = useMemo(
+    () => ({
+      Inbound: '#3700FF', // Electric Indigo
+      Readymode: '#44FF07', // Harlequin Green
+      Referral: '#FB13F3', // Neon Fuchsia
+      'Warm-Market': '#FF6B45', // Bright Orange
+    }),
     []
   )
+
+  // ✅ normalize incoming props into a map (handles unsorted labels)
+  const sourceMap = useMemo(() => {
+    const m = new Map<string, number>()
+    ;(labels || []).forEach((raw, i) => {
+      const k = String(raw || '').trim()
+      if (!k) return
+      const v = Number(values?.[i] ?? 0) || 0
+      m.set(k, (m.get(k) || 0) + v)
+    })
+    return m
+  }, [labels, values])
+
+  // ✅ build final series in your order (and ONLY your sources)
+  const safeLabels = useMemo(() => {
+    return SOURCE_ORDER.slice()
+  }, [])
+
+  const safeValues = useMemo(() => {
+    return SOURCE_ORDER.map((s) => Number(sourceMap.get(s) || 0))
+  }, [sourceMap])
+
+  const totalDeals = useMemo(() => safeValues.reduce((a, b) => a + b, 0) || 0, [safeValues])
 
   const top = useMemo(() => {
     let max = -Infinity
@@ -39,11 +61,11 @@ export default function DealSourceDonut({
         idx = i
       }
     })
-    const total = safeValues.reduce((a, b) => a + b, 0) || 1
-    const pct = Math.round((safeValues[idx] / total) * 100)
+    const pct = totalDeals ? Math.round((safeValues[idx] / totalDeals) * 100) : 0
     return { idx, name: safeLabels[idx] ?? '—', pct, count: safeValues[idx] ?? 0 }
-  }, [safeLabels, safeValues])
+  }, [safeLabels, safeValues, totalDeals])
 
+  // ✅ small “pop” when top source changes
   const [pop, setPop] = useState(false)
   const prevTopNameRef = useRef<string>('')
 
@@ -58,12 +80,16 @@ export default function DealSourceDonut({
   }, [top.name])
 
   const data = useMemo(() => {
+    const colors = safeLabels.map((s) => colorBySource[s as SourceName])
+
+    // if everything is 0, show a “No Data” ring to avoid weird chart behavior
+    const hasAny = safeValues.some((v) => v > 0)
     return {
-      labels: safeLabels,
+      labels: hasAny ? safeLabels : ['No Data'],
       datasets: [
         {
-          data: safeValues,
-          backgroundColor: safeValues.map((_, i) => palette[i % palette.length]),
+          data: hasAny ? safeValues : [100],
+          backgroundColor: hasAny ? colors : ['rgba(255,255,255,0.08)'],
           borderWidth: 1,
           borderColor: 'rgba(255,255,255,0.10)',
           hoverOffset: 8,
@@ -71,7 +97,7 @@ export default function DealSourceDonut({
         },
       ],
     }
-  }, [safeLabels, safeValues, palette])
+  }, [safeLabels, safeValues, colorBySource])
 
   const glowPlugin = useMemo(() => {
     return {
@@ -110,7 +136,16 @@ export default function DealSourceDonut({
           padding: 10,
           callbacks: {
             title: (items: any) => `Deal Source: ${items?.[0]?.label ?? ''}`,
-            label: (item: any) => `Deals Closed ${Number(item?.raw ?? 0)}`,
+            // ✅ two lines, stacked
+            label: (item: any) => {
+              const dealsClosed = Number(item?.raw ?? 0)
+              const total = (item?.dataset?.data || []).reduce(
+                (s: number, x: any) => s + (Number(x) || 0),
+                0
+              )
+              const pct = total ? Math.round((dealsClosed / total) * 100) : 0
+              return [`Deals Closed: ${dealsClosed}`, `Percentage of Business: ${pct}%`]
+            },
           },
         },
       },
@@ -121,6 +156,7 @@ export default function DealSourceDonut({
     <div className="h-56 w-full relative">
       <Doughnut data={data} options={options} plugins={glow ? [glowPlugin] : undefined} />
 
+      {/* center overlay */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-4 text-center">
         <div className="text-[11px] text-white/60">Top Source</div>
         <div className="text-lg font-semibold truncate max-w-[240px]">{top.name}</div>
