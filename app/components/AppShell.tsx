@@ -21,7 +21,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (hideSidebar) {
     return (
-      <main className="min-h-screen w-full min-w-0 px-4 py-6 md:px-10 md:py-10">
+      <main className="min-h-screen w-full min-w-0 px-4 py-6 md:px-8 md:py-8">
         {children}
       </main>
     )
@@ -30,7 +30,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen w-full min-w-0 flex">
       <Sidebar />
-      <main className="flex-1 w-full min-w-0 px-4 py-6 md:px-8 md:py-8">
+      {/* ✅ Reduced desktop padding so content fits more */}
+      <main className="flex-1 w-full min-w-0 px-4 py-6 md:px-6 md:py-8">
         {children}
       </main>
     </div>
