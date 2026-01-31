@@ -384,10 +384,10 @@ export default function DealHousePage() {
             <h1 className="text-3xl font-semibold tracking-tight">Deal House</h1>
             <p className="text-sm text-white/60 mt-1">
               {tab === 'team'
-                ? 'Team view (you + downlines)'
+                ? 'Team view'
                 : tab === 'notifications'
                 ? 'Notifications (your book of business)'
-                : 'Personal view (your deals only)'}
+                : 'Personal view'}
             </p>
           </div>
 
@@ -596,7 +596,7 @@ export default function DealHousePage() {
           </div>
         )}
 
-        <div className="mt-3 text-[11px] text-white/45">Go Close..</div>
+        <div className="mt-3 text-[11px] text-white/45">Ensure to Follow Up With Your Clients</div>
       </div>
 
       {/* EDIT MODAL */}
