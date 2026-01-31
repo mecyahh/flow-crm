@@ -113,7 +113,7 @@ export default function CarrierDonut({
           padding: 10,
           callbacks: {
             title: (items: any) => `${items?.[0]?.label ?? ''}`,
-            label: (item: any) => `Count: ${item?.formattedValue ?? ''}`,
+            label: (item: any) => `Apps Submitted: ${item?.formattedValue ?? ''}`,
           },
         },
       },
