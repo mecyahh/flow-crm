@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import GlassSelect from '@/app/components/GlassSelect'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 import FlowDatePicker from '@/app/components/FlowDatePicker'
@@ -373,16 +374,14 @@ export default function FollowUpsClient() {
                 <FlowDatePicker value={editDraft.dob} onChange={(v) => setEditDraft((d) => ({ ...d, dob: v }))} placeholder="Select DOB" />
               </Field>
 
-              <Field label="Company">
-                <select className={inputCls} value={editDraft.company} onChange={(e) => setEditDraft((d) => ({ ...d, company: e.target.value }))}>
-                  <option value="">Select…</option>
-                  {CARRIERS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+             <Field label="Company">
+  <GlassSelect
+    value={form.company}
+    onChange={(v) => setForm((f) => ({ ...f, company: v }))}
+    placeholder="Select…"
+    options={CARRIERS.map((c) => ({ value: c, label: c }))}
+  />
+</Field>
 
               <Field label="Coverage">
                 <input
@@ -475,15 +474,13 @@ export default function FollowUpsClient() {
               </Field>
 
               <Field label="Company">
-                <select className={inputCls} value={form.company} onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}>
-                  <option value="">Select…</option>
-                  {CARRIERS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+  <GlassSelect
+    value={editDraft.company}
+    onChange={(v) => setEditDraft((d) => ({ ...d, company: v }))}
+    placeholder="Select…"
+    options={CARRIERS.map((c) => ({ value: c, label: c }))}
+  />
+</Field>
 
               <Field label="Coverage">
                 <input
