@@ -168,7 +168,6 @@ const weekRange = useMemo(() => {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <Sidebar />
 
       {/* animations (top-3 only) */}
       <style jsx global>{`
