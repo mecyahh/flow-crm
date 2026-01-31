@@ -218,7 +218,7 @@ const weekRange = useMemo(() => {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
-            <p className="text-sm text-white/60 mt-1">Agency-wide weekly leaderboard + daily AP consistency.</p>
+            <p className="text-sm text-white/60 mt-1">Agency-Wide Leaderboard</p>
           </div>
 
           <button
@@ -244,9 +244,6 @@ const weekRange = useMemo(() => {
     defaultPreset="THIS_WEEK"
     placeholder="Select range"
   />
-  <div className="mt-2 text-[11px] text-white/45">
-    Week: {toISODateLocal(weekRange.start)} → {toISODateLocal(weekRange.end)} (Mon → Sun)
-  </div>
 </div>
 
         {/* ✅ 3 stat cards */}
