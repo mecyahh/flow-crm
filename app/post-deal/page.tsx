@@ -685,7 +685,7 @@ const inputCls =
   'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7 text-white placeholder:text-white/45'
 
 const selectCls =
-  'w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/7 text-white'
+  'w-full rounded-2xl border border-white/10 bg-white px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white text-black'
 
 const btnSoft = 'rounded-xl bg-white/10 hover:bg-white/15 transition px-3 py-2 text-xs'
 const btnGlass = 'glass px-4 py-2 text-sm font-medium hover:bg-white/10 transition rounded-2xl border border-white/10'
