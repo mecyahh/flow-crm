@@ -668,7 +668,7 @@ async function fetchDealsForIds(ids: string[], startISO: string): Promise<DealRo
       .limit(10000)
 
     if (error) continue
-    out.push(...(((data || []) as DealRoweRow[]) || []))
+    out.push(...(((data || []) as DealRow[]) || []))
   }
 
   return out
