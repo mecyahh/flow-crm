@@ -25,6 +25,7 @@ type DealRow = {
   agent_id: string | null
   premium: any
   company: string | null
+  source: string | null
 }
 
 type ParsedDeal = DealRow & {
@@ -33,6 +34,7 @@ type ParsedDeal = DealRow & {
   annualNum: number
   companySafe: string
   agentSafe: string
+  sourceSafe: string
 }
 
 const UNDER_5K_ANNUAL = 5000
@@ -223,7 +225,7 @@ export default function AnalyticsPage() {
     // Fallback (requires RLS policy on deals)
     const q = supabase
       .from('deals')
-      .select('id,created_at,agent_id,premium,company')
+      .select('id,created_at,agent_id,premium,company,source')
       .gte('created_at', queryStartISO)
       .lt('created_at', queryEndISO)
       .order('created_at', { ascending: true })
@@ -270,6 +272,24 @@ export default function AnalyticsPage() {
       const prof = d.agent_id ? agentsById.get(d.agent_id) : null
       const agentSafe = prof ? displayName(prof) : d.agent_id ? 'Agent' : '—'
 
+        const sourceDist = useMemo(() => {
+    const map = new Map<string, number>()
+    parsed.forEach((d) => {
+      const k = String((d as any).sourceSafe || 'Unknown').trim() || 'Unknown'
+      map.set(k, (map.get(k) || 0) + 1)
+    })
+
+    const top = Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+
+    const labels = top.length ? top.map((e) => e[0]) : ['No Data']
+    const values = top.length ? top.map((e) => e[1]) : [100]
+    return { labels, values }
+  }, [parsed])
+
+      const sourceSafe = (String((d as any).source || 'Unknown').trim() || 'Unknown')
+
       return {
         ...d,
         dt,
@@ -277,6 +297,7 @@ export default function AnalyticsPage() {
         annualNum: annual,
         companySafe,
         agentSafe,
+        sourceSafe,
       }
     })
   }, [deals, agentsById])
