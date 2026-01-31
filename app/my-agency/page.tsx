@@ -3,7 +3,6 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useMemo, useState } from 'react'
-import Sidebar from '../components/Sidebar'
 import FlowRangePicker from '../components/FlowRangePicker'
 import AgentLegDonut from '../components/AgentLegDonut'
 import { supabase } from '@/lib/supabaseClient'
@@ -298,70 +297,69 @@ export default function MyAgencyPage() {
   // ✅ LEG DONUT DISTRIBUTION (Direct downlines only)
   // ✅ EXCLUDE legs unless the DIRECT downline has DOWNLINES producing in range
   const legDist = useMemo(() => {
-  if (!me) return { labels: ['No Data'], values: [100] }
+    if (!me) return { labels: ['No Data'], values: [100] }
 
-  const directs = (directIds || []).slice()
-  if (!directs.length) return { labels: ['No Data'], values: [100] }
+    const directs = (directIds || []).slice()
+    if (!directs.length) return { labels: ['No Data'], values: [100] }
 
-  // Sum AP by user in current range
-  const apByUser = new Map<string, number>()
-  rangeDeals.forEach((d) => {
-    if (!d.user_id) return
-    apByUser.set(d.user_id, (apByUser.get(d.user_id) || 0) + Number(d.ap || 0))
-  })
-
-  // ✅ Donut is ONLY for direct legs that have producing downlines
-  // plus one "misc" slice for direct downlines with no producing downlines (personal only)
-  const agencyLegRows: { label: string; ap: number }[] = []
-  let miscNoAgencyAp = 0
-
-  directs.forEach((root) => {
-    // root + descendants
-    const legIdsAll = buildTreeIds(root, directory)
-    const downlineIds = legIdsAll.filter((id) => id !== root)
-
-    const rootAp = apByUser.get(root) || 0
-
-    let downlineAp = 0
-    downlineIds.forEach((uid) => {
-      downlineAp += apByUser.get(uid) || 0
+    // Sum AP by user in current range
+    const apByUser = new Map<string, number>()
+    rangeDeals.forEach((d) => {
+      if (!d.user_id) return
+      apByUser.set(d.user_id, (apByUser.get(d.user_id) || 0) + Number(d.ap || 0))
     })
 
-    // Only include "agency" legs if they have producing downlines (downlineAp > 0)
-    if (downlineAp > 0) {
-      const p = byId.get(root)
-      const label = p ? displayName(p) : 'Agent'
-      agencyLegRows.push({ label, ap: rootAp + downlineAp })
-    } else {
-      // No producing downlines => goes into one combined misc slice (if they personally produced)
-      if (rootAp > 0) miscNoAgencyAp += rootAp
+    // ✅ Donut is ONLY for direct legs that have producing downlines
+    // plus one "misc" slice for direct downlines with no producing downlines (personal only)
+    const agencyLegRows: { label: string; ap: number }[] = []
+    let miscNoAgencyAp = 0
+
+    directs.forEach((root) => {
+      // root + descendants
+      const legIdsAll = buildTreeIds(root, directory)
+      const downlineIds = legIdsAll.filter((id) => id !== root)
+
+      const rootAp = apByUser.get(root) || 0
+
+      let downlineAp = 0
+      downlineIds.forEach((uid) => {
+        downlineAp += apByUser.get(uid) || 0
+      })
+
+      // Only include "agency" legs if they have producing downlines (downlineAp > 0)
+      if (downlineAp > 0) {
+        const p = byId.get(root)
+        const label = p ? displayName(p) : 'Agent'
+        agencyLegRows.push({ label, ap: rootAp + downlineAp })
+      } else {
+        // No producing downlines => goes into one combined misc slice (if they personally produced)
+        if (rootAp > 0) miscNoAgencyAp += rootAp
+      }
+    })
+
+    // Build final donut
+    const labels: string[] = []
+    const values: number[] = []
+
+    agencyLegRows.sort((a, b) => b.ap - a.ap)
+    agencyLegRows.forEach((r) => {
+      labels.push(r.label)
+      values.push(r.ap)
+    })
+
+    if (miscNoAgencyAp > 0) {
+      labels.push('No Agency Yet (Direct)')
+      values.push(miscNoAgencyAp)
     }
-  })
 
-  // Build final donut
-  const labels: string[] = []
-  const values: number[] = []
+    const total = values.reduce((s, v) => s + Number(v || 0), 0)
+    if (!total) return { labels: ['No Data'], values: [100] }
 
-  agencyLegRows.sort((a, b) => b.ap - a.ap)
-  agencyLegRows.forEach((r) => {
-    labels.push(r.label)
-    values.push(r.ap)
-  })
-
-  if (miscNoAgencyAp > 0) {
-    labels.push('No Agency Yet (Direct)')
-    values.push(miscNoAgencyAp)
-  }
-
-  const total = values.reduce((s, v) => s + Number(v || 0), 0)
-  if (!total) return { labels: ['No Data'], values: [100] }
-
-  return { labels, values }
-}, [me, directIds, rangeDeals, directory, byId])
+    return { labels, values }
+  }, [me, directIds, rangeDeals, directory, byId])
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-
       {toast && (
         <div className="fixed top-5 right-5 z-50">
           <div className="glass px-5 py-4 rounded-2xl border border-white/10 shadow-2xl">
@@ -375,14 +373,17 @@ export default function MyAgencyPage() {
         </div>
       )}
 
-      <div className="ml-64 px-10 py-10">
-        <div className="mb-6 flex items-end justify-between gap-4">
+      {/* ✅ Layout-only fix: remove hard left margin + make padding responsive */}
+      <div className="w-full min-w-0 px-4 py-6 md:px-10 md:py-10">
+        <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">My Agency</h1>
-            <p className="text-sm text-white/60 mt-1">{canSeeTree ? 'Detailed Agency View' : 'Your stats only.'}</p>
+            <p className="text-sm text-white/60 mt-1">
+              {canSeeTree ? 'Detailed Agency View' : 'Your stats only.'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <FlowRangePicker value={range} onChange={setRange} defaultPreset="THIS_WEEK" placeholder="Select range" />
             <button
               onClick={() => window.location.reload()}
@@ -472,9 +473,7 @@ export default function MyAgencyPage() {
             {isEmptyAgency && (
               <div className="glass rounded-2xl border border-white/10 p-6 mb-6">
                 <div className="text-sm font-semibold">You have not started building an agency yet</div>
-                <div className="text-xs text-white/55 mt-2">
-                  Add downlines under you to populate the directory and top producers.
-                </div>
+                <div className="text-xs text-white/55 mt-2">Add downlines under you to populate the directory and top producers.</div>
               </div>
             )}
 
@@ -516,8 +515,7 @@ export default function MyAgencyPage() {
                   <AgentLegDonut labels={legDist.labels} values={legDist.values} glow />
 
                   <div className="mt-2 text-[11px] text-white/45">
-                    Each slice = a direct downline’s producing downlines (only). If their downlines aren’t producing yet,
-                    they won’t appear.
+                    Each slice = a direct downline’s producing downlines (only). If their downlines aren’t producing yet, they won’t appear.
                   </div>
                 </div>
               </div>
@@ -670,7 +668,7 @@ async function fetchDealsForIds(ids: string[], startISO: string): Promise<DealRo
       .limit(10000)
 
     if (error) continue
-    out.push(...(((data || []) as DealRow[]) || []))
+    out.push(...(((data || []) as DealRoweRow[]) || []))
   }
 
   return out
@@ -716,7 +714,7 @@ function toPremium(p: any) {
 
 function displayName(p: Profile) {
   const n = `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim()
-  return n || (p.email || 'Agent')
+  return n || p.email || 'Agent'
 }
 
 function formatMoney2(n: number) {
