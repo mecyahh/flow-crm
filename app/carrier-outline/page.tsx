@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react' 
+import GlassSelect from '@/app/components/GlassSelect'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -415,16 +416,16 @@ export default function CarrierOutlinePage() {
                     </Field>
 
                     <Field label="Status">
-                      <select
-                        className={inputCls}
-                        value={d?.status || 'active'}
-                        onChange={(e) => setField(c.id, 'status', e.target.value)}
-                      >
-                        <option value="active">Active</option>
-                        <option value="pending">Pending</option>
-                        <option value="inactive">Inactive</option>
-                      </select>
-                    </Field>
+  <GlassSelect
+    value={d?.status || 'active'}
+    onChange={(v) => setField(c.id, 'status', v)}
+    options={[
+      { value: 'active', label: 'Active' },
+      { value: 'pending', label: 'Pending' },
+      { value: 'inactive', label: 'Inactive' },
+    ]}
+  />
+</Field>
 
                     <Field label="Username">
                       <input
