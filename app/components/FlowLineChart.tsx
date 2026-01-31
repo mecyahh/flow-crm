@@ -105,7 +105,7 @@ export default function FlowLineChart({
           padding: 10,
           callbacks: {
             title: (items: any) => `Flow • ${items?.[0]?.label ?? ''}`,
-            label: (item: any) => `Deals: ${item?.formattedValue ?? ''}`,
+            label: (item: any) => `Production: ${item?.formattedValue ?? ''}`,
           },
         },
       },
