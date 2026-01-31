@@ -1,6 +1,7 @@
+// ✅ REPLACE ENTIRE FILE: /app/layout.tsx
 import './globals.css'
 import Sidebar from './components/Sidebar'
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 
 export const metadata: Metadata = {
   title: 'Flow',
@@ -12,28 +13,17 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-[#0b0f1a] text-white">
-        <div className="flex min-h-screen">
-
-          {/* Sidebar fixed width */}
-          <div className="hidden md:block w-72 shrink-0">
-            <Sidebar />
-          </div>
-
-          {/* Mobile overlay sidebar */}
-          <div className="md:hidden">
-            <Sidebar />
-          </div>
-
-          {/* Main content */}
-          <main className="flex-1 overflow-x-hidden p-6">
-            {children}
-          </main>
-
-        </div>
+      <body className="min-h-screen bg-[#0b0f1a] text-white overflow-x-hidden">
+        <Sidebar />
+        <main className="min-h-screen w-full md:pl-72">{children}</main>
       </body>
     </html>
   )
