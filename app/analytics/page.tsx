@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic'
 import React, { useEffect, useMemo, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import FlowRangePicker from '@/app/components/FlowRangePicker'
-import DealSourceDonut from '../components/DealSourceDonut'
+import dynamic from 'next/dynamic'
+const DealSourceDonut = dynamic(() => import('../components/DealSourceDonut'), { ssr: false })
 import { supabase } from '@/lib/supabaseClient'
 
 type Profile = {
