@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '../components/Sidebar'
 import { supabase } from '@/lib/supabaseClient'
+import GlassSelect, { GlassOption } from '@/app/components/GlassSelect'
 import FlowDatePicker from '@/app/components/FlowDatePicker'
 
 type CarrierRow = {
@@ -381,51 +382,40 @@ export default function PostDealPage() {
                   </div>
 
                   <Field label="Carrier">
-                    <select
-                      className={selectCls}
-                      value={carrier_id}
-                      onChange={(e) => {
-                        const cid = e.target.value
-                        setCarrierId(cid)
+  <GlassSelect
+    value={carrier_id}
+    onChange={(cid, opt) => {
+      setCarrierId(cid)
+      // use the selected label for deals.company
+      setCompany(opt?.label || '')
+    }}
+    placeholder="Select carrier…"
+    options={carrierOptions.map((c) => ({ value: c.id, label: c.label }))}
+  />
+</Field>
 
-                        const picked = carrierOptions.find((x) => x.id === cid)
-                        const carrierName = picked?.label || ''
-                        setCompany(carrierName)
-                      }}
-                    >
-                      <option value="">Select carrier…</option>
-                      {carrierOptions.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                 <Field label="Product">
+  <GlassSelect
+    value={product_name}
+    disabled={!carrier_id}
+    onChange={(v) => setProductName(v)}
+    placeholder={carrier_id ? 'Select product…' : 'Select carrier first…'}
+    options={productOptions.map((p) => ({ value: p.label, label: p.label }))}
+  />
+</Field>
 
-                  <Field label="Product">
-                    <select
-                      className={[selectCls, !carrier_id ? 'opacity-50 cursor-not-allowed' : ''].join(' ')}
-                      value={product_name}
-                      onChange={(e) => setProductName(e.target.value)}
-                      disabled={!carrier_id}
-                    >
-                      <option value="">{carrier_id ? 'Select product…' : 'Select carrier first…'}</option>
-                      {productOptions.map((p) => (
-                        <option key={p.id} value={p.label}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Source">
-                    <select className={selectCls} value={source} onChange={(e) => setSource(e.target.value as any)}>
-                      <option value="Inbound">Inbound</option>
-                      <option value="Readymode">Readymode</option>
-                      <option value="Referral">Referral</option>
-                      <option value="Warm-Market">Warm-Market</option>
-                    </select>
-                  </Field>
+                 <Field label="Source">
+  <GlassSelect
+    value={source}
+    onChange={(v) => setSource(v as any)}
+    options={[
+      { value: 'Inbound', label: 'Inbound' },
+      { value: 'Readymode', label: 'Readymode' },
+      { value: 'Referral', label: 'Referral' },
+      { value: 'Warm-Market', label: 'Warm-Market' },
+    ]}
+  />
+</Field>
 
                   <Field label="Referrals Collected">
                     <input
