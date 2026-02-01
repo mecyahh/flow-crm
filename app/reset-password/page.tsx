@@ -17,29 +17,39 @@ export default function ResetPasswordPage() {
   const [email, setEmail] = useState('')
   const [resent, setResent] = useState(false)
 
-  // Support PKCE reset links (?code=...)
-  const code = useMemo(() => {
-    if (typeof window === 'undefined') return ''
+  // ✅ Parse query params safely
+  const { code, redirect } = useMemo(() => {
+    if (typeof window === 'undefined') return { code: '', redirect: '' }
     const u = new URL(window.location.href)
-    return u.searchParams.get('code') || ''
+    return {
+      code: u.searchParams.get('code') || '',
+      redirect: u.searchParams.get('redirect') || '',
+    }
   }, [])
 
   const origin = useMemo(() => (typeof window !== 'undefined' ? window.location.origin : ''), [])
   const resetUrl = useMemo(() => `${origin}/reset-password`, [origin])
 
   useEffect(() => {
-    // ✅ Same behavior as before (session-based), but also supports:
-    // - PKCE links via ?code=
-    // - Hash token links via #access_token / #refresh_token
     ;(async () => {
       try {
-        // 1) PKCE flow
-        if (code) {
+        setToast(null)
+
+        // 0) If they came from your email template:
+        // /reset-password?redirect={{ .ConfirmationURL }}
+        // We must exchange that URL (contains code) for a session.
+        if (redirect) {
+          const { error } = await supabase.auth.exchangeCodeForSession(redirect)
+          if (error) throw error
+        }
+
+        // 1) PKCE direct flow: /reset-password?code=...
+        if (!redirect && code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code)
           if (error) throw error
         }
 
-        // 2) Hash token flow (older recovery style)
+        // 2) Hash token flow: /reset-password#access_token=...&refresh_token=...
         if (typeof window !== 'undefined' && window.location.hash?.includes('access_token=')) {
           const hash = window.location.hash.replace(/^#/, '')
           const params = new URLSearchParams(hash)
@@ -52,7 +62,7 @@ export default function ResetPasswordPage() {
           }
         }
 
-        // 3) Confirm session exists (same as yesterday)
+        // 3) Confirm session exists
         const { data } = await supabase.auth.getSession()
         setReady(!!data.session)
       } catch (e: any) {
@@ -60,7 +70,7 @@ export default function ResetPasswordPage() {
         setToast(errMsg(e))
       }
     })()
-  }, [code])
+  }, [code, redirect])
 
   async function updatePassword() {
     setBusy(true)
@@ -108,7 +118,6 @@ export default function ResetPasswordPage() {
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-2xl font-semibold">Reset password</h1>
 
-          {/* ✅ Back to login */}
           <button
             type="button"
             onClick={() => (window.location.href = '/login')}
@@ -132,7 +141,6 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
-        {/* ✅ If session is NOT ready, show resend block (no dead ends) */}
         {!ready && (
           <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
             <div className="text-sm font-semibold">Resend reset link</div>
@@ -170,7 +178,6 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
-        {/* ✅ If session IS ready, show password update */}
         {ready && (
           <>
             <div className="mt-5">
