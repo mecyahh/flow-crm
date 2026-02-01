@@ -24,83 +24,86 @@ function getInitials(name?: string) {
   return initials || 'U'
 }
 
-function safeParseJSON<T = any>(v: string | null): T | null {
-  if (!v) return null
-  try {
-    return JSON.parse(v) as T
-  } catch {
-    return null
-  }
-}
-
 export default function Sidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
-  // Best-effort user display (won't break if your app stores it differently)
-  const user = useMemo(() => {
-    if (typeof window === 'undefined') return null as any
-
-    const a = safeParseJSON<any>(localStorage.getItem('flow_user'))
-    const b = safeParseJSON<any>(localStorage.getItem('user'))
-
-    // ✅ Better Supabase token discovery (covers sb-*-auth-token keys)
-    let tokenRaw: any = safeParseJSON<any>(localStorage.getItem('supabase.auth.token'))
-    if (!tokenRaw) {
-      try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i) || ''
-          if (k.startsWith('sb-') && k.endsWith('-auth-token')) {
-            tokenRaw = safeParseJSON<any>(localStorage.getItem(k))
-            if (tokenRaw) break
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    const tokenUser =
-      tokenRaw?.currentSession?.user ??
-      tokenRaw?.currentSession?.user?.user_metadata ??
-      tokenRaw?.user ??
-      null
-
-    const u = a ?? b ?? tokenUser ?? null
-    const meta = u?.user_metadata ?? u?.metadata ?? u ?? {}
-
-    // ✅ Prefer an actual username field if present
-    const username =
-      meta?.username ||
-      meta?.user_name ||
-      meta?.preferred_username ||
-      meta?.handle ||
-      null
-
-    const name =
-      username ||
-      meta?.full_name ||
-      meta?.name ||
-      meta?.display_name ||
-      u?.name ||
-      u?.email ||
-      'User'
-
-    const avatarUrl =
-      meta?.avatar_url ||
-      meta?.picture ||
-      meta?.photoURL ||
-      u?.avatar_url ||
-      u?.picture ||
-      null
-
-    return { name, avatarUrl }
-  }, [])
+  // ✅ Real user display from profiles table
+  const [user, setUser] = useState<{ name: string; avatarUrl: string | null }>({
+    name: 'User',
+    avatarUrl: null,
+  })
 
   useEffect(() => {
     // Close mobile drawer on route change
     setOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadMe() {
+      try {
+        const { data: userRes, error: userErr } = await supabase.auth.getUser()
+        if (userErr) throw userErr
+
+        const uid = userRes.user?.id
+        const email = userRes.user?.email || 'User'
+        if (!uid) {
+          if (!mounted) return
+          setUser({ name: 'User', avatarUrl: null })
+          return
+        }
+
+        // ✅ Pull from profiles (this is where your first_name + avatar_url are)
+        const { data: prof, error: profErr } = await supabase
+          .from('profiles')
+          .select('first_name,last_name,avatar_url,email')
+          .eq('id', uid)
+          .single()
+
+        if (profErr) throw profErr
+
+        const first = (prof?.first_name || '').trim()
+        const last = (prof?.last_name || '').trim()
+
+        // Prefer first name, fall back to full, then email
+        const displayName =
+          first ||
+          [first, last].filter(Boolean).join(' ').trim() ||
+          (prof?.email as string) ||
+          email ||
+          'User'
+
+        if (!mounted) return
+        setUser({
+          name: displayName,
+          avatarUrl: (prof?.avatar_url as string | null) || null,
+        })
+      } catch {
+        // Fallback: at least show email if profile lookup fails
+        try {
+          const { data } = await supabase.auth.getUser()
+          const email = data.user?.email || 'User'
+          if (mounted) setUser({ name: email, avatarUrl: null })
+        } catch {
+          if (mounted) setUser({ name: 'User', avatarUrl: null })
+        }
+      }
+    }
+
+    loadMe()
+
+    // Optional: update on auth changes (login/logout)
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      loadMe()
+    })
+
+    return () => {
+      mounted = false
+      sub?.subscription?.unsubscribe?.()
+    }
+  }, [])
 
   async function logout() {
     try {
@@ -108,22 +111,6 @@ export default function Sidebar() {
     } catch {
       // ignore
     }
-
-    // best-effort cleanup for local user caches
-    try {
-      localStorage.removeItem('flow_user')
-      localStorage.removeItem('user')
-      localStorage.removeItem('supabase.auth.token')
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i) || ''
-        if (k.startsWith('sb-') && k.endsWith('-auth-token')) {
-          localStorage.removeItem(k)
-        }
-      }
-    } catch {
-      // ignore
-    }
-
     window.location.href = '/login'
   }
 
@@ -146,7 +133,6 @@ export default function Sidebar() {
 
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-full border border-white/10 bg-white/5 overflow-hidden flex items-center justify-center">
-              {/* ✅ Always try to show actual profile picture */}
               {user?.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={user.avatarUrl} alt="Profile" className="h-full w-full object-cover" />
@@ -158,7 +144,6 @@ export default function Sidebar() {
         </div>
 
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          {/* ✅ Signed in as + actual username */}
           <div className="text-xs text-white/50">Signed in as</div>
           <div className="mt-0.5 text-sm font-medium truncate">{user?.name ?? 'User'}</div>
         </div>
@@ -204,7 +189,6 @@ export default function Sidebar() {
 
       <div className="mt-auto p-6 pt-0">
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          {/* ✅ Glowy red logout button */}
           <button
             onClick={logout}
             className="
@@ -294,7 +278,6 @@ export default function Sidebar() {
           </nav>
         </div>
 
-        {/* ✅ Mobile logout in same “bottom bubble” style */}
         <div className="mt-auto p-6 pt-0">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <button
