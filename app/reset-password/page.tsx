@@ -9,79 +9,65 @@ function errMsg(e: any) {
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+
+  // controls whether we’re allowed to show the form
   const [ready, setReady] = useState(false)
 
-  // Resend reset
-  const [email, setEmail] = useState('')
-  const [resent, setResent] = useState(false)
-
-  // ✅ Parse query params safely
-  const { code, redirect } = useMemo(() => {
-    if (typeof window === 'undefined') return { code: '', redirect: '' }
+  // ✅ Read token_hash from URL
+  const { tokenHash, type } = useMemo(() => {
+    if (typeof window === 'undefined') return { tokenHash: '', type: 'recovery' as const }
     const u = new URL(window.location.href)
     return {
-      code: u.searchParams.get('code') || '',
-      redirect: u.searchParams.get('redirect') || '',
+      tokenHash: u.searchParams.get('token_hash') || '',
+      type: (u.searchParams.get('type') as 'recovery' | 'invite' | 'magiclink' | 'email') || 'recovery',
     }
   }, [])
-
-  const origin = useMemo(() => (typeof window !== 'undefined' ? window.location.origin : ''), [])
-  const resetUrl = useMemo(() => `${origin}/reset-password`, [origin])
 
   useEffect(() => {
     ;(async () => {
       try {
         setToast(null)
+        setReady(false)
 
-        // 0) If they came from your email template:
-        // /reset-password?redirect={{ .ConfirmationURL }}
-        // We must exchange that URL (contains code) for a session.
-        if (redirect) {
-          const { error } = await supabase.auth.exchangeCodeForSession(redirect)
-          if (error) throw error
+        // ✅ Universal recovery flow (no PKCE verifier needed)
+        if (!tokenHash) {
+          throw new Error('Invalid or missing reset token. Please request a new reset link from the login page.')
         }
 
-        // 1) PKCE direct flow: /reset-password?code=...
-        if (!redirect && code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code)
-          if (error) throw error
-        }
+        const { error } = await supabase.auth.verifyOtp({
+          type: 'recovery',
+          token_hash: tokenHash,
+        })
 
-        // 2) Hash token flow: /reset-password#access_token=...&refresh_token=...
-        if (typeof window !== 'undefined' && window.location.hash?.includes('access_token=')) {
-          const hash = window.location.hash.replace(/^#/, '')
-          const params = new URLSearchParams(hash)
-          const access_token = params.get('access_token') || ''
-          const refresh_token = params.get('refresh_token') || ''
+        if (error) throw error
 
-          if (access_token && refresh_token) {
-            const { error } = await supabase.auth.setSession({ access_token, refresh_token })
-            if (error) throw error
-          }
-        }
-
-        // 3) Confirm session exists
-        const { data } = await supabase.auth.getSession()
-        setReady(!!data.session)
+        // We now have a recovery session; show password form
+        setReady(true)
       } catch (e: any) {
         setReady(false)
         setToast(errMsg(e))
       }
     })()
-  }, [code, redirect])
+  }, [tokenHash, type])
 
   async function updatePassword() {
     setBusy(true)
     setToast(null)
     try {
+      if (!ready) throw new Error('Reset session is not active. Please request a new reset link.')
       if (password.length < 8) throw new Error('Password must be at least 8 characters')
+      if (password !== confirm) throw new Error('Passwords do not match')
 
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
 
-      setToast('Password updated ✅ Redirecting…')
+      // ⚠️ Passwords are NOT stored in profiles (and should never be).
+      // Updating Supabase Auth password is what enables future logins.
+
+      setToast('Password updated ✅ Redirecting to login…')
       setTimeout(() => (window.location.href = '/login'), 800)
     } catch (e: any) {
       setToast(errMsg(e))
@@ -89,28 +75,6 @@ export default function ResetPasswordPage() {
       setBusy(false)
     }
   }
-
-  async function resendReset() {
-    setToast(null)
-    setResent(false)
-
-    const em = email.trim().toLowerCase()
-    if (!em) return setToast('Enter your email to resend the reset link')
-
-    setBusy(true)
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(em, { redirectTo: resetUrl })
-      if (error) throw error
-      setResent(true)
-      setToast('Reset email sent ✅ Check your inbox.')
-    } catch (e: any) {
-      setToast(errMsg(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const disabled = busy
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex items-center justify-center px-4">
@@ -127,13 +91,9 @@ export default function ResetPasswordPage() {
           </button>
         </div>
 
-        {!ready ? (
-          <p className="text-sm text-white/60 mt-3">
-            Open the reset link from your email in this same browser.
-          </p>
-        ) : (
-          <p className="text-sm text-white/60 mt-3">Set a new password below.</p>
-        )}
+        <p className="text-sm text-white/60 mt-3">
+          Enter your new password below.
+        </p>
 
         {toast && (
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
@@ -141,71 +101,43 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
-        {!ready && (
-          <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="text-sm font-semibold">Resend reset link</div>
-            <div className="text-xs text-white/60 mt-1">
-              Enter your email and we’ll send a fresh reset link.
-            </div>
+        <div className="mt-5">
+          <label className="text-[11px] text-white/60">New Password</label>
+          <input
+            type="password"
+            className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/10"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Minimum 8 characters"
+            disabled={!ready || busy}
+            autoComplete="new-password"
+          />
+        </div>
 
-            <div className="mt-3">
-              <label className="text-[11px] text-white/60">Email</label>
-              <input
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/10"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                autoComplete="email"
-                inputMode="email"
-                disabled={disabled}
-              />
-            </div>
+        <div className="mt-4">
+          <label className="text-[11px] text-white/60">Confirm Password</label>
+          <input
+            type="password"
+            className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/10"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="Re-enter password"
+            disabled={!ready || busy}
+            autoComplete="new-password"
+          />
+        </div>
 
-            <button
-              type="button"
-              onClick={resendReset}
-              disabled={disabled}
-              className="mt-4 w-full rounded-2xl px-4 py-3 text-sm font-semibold transition bg-[var(--accent)] text-[var(--accentText)] hover:opacity-90 disabled:opacity-50"
-            >
-              {busy ? 'Sending…' : 'Send reset email'}
-            </button>
+        <button
+          onClick={updatePassword}
+          disabled={!ready || busy}
+          className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-semibold transition bg-[var(--accent)] text-[var(--accentText)] hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Update password'}
+        </button>
 
-            {resent && (
-              <div className="mt-3 text-[11px] text-white/60">
-                If you don’t see it, check Spam/Promotions.
-              </div>
-            )}
-          </div>
-        )}
-
-        {ready && (
-          <>
-            <div className="mt-5">
-              <label className="text-[11px] text-white/60">New Password</label>
-              <input
-                type="password"
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-white/20 focus:bg-white/10"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 8 characters"
-                disabled={!ready || disabled}
-                autoComplete="new-password"
-              />
-            </div>
-
-            <button
-              onClick={updatePassword}
-              disabled={busy || !ready}
-              className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-semibold transition bg-[var(--accent)] text-[var(--accentText)] hover:opacity-90 disabled:opacity-50"
-            >
-              {busy ? 'Saving…' : 'Update password'}
-            </button>
-
-            <div className="mt-3 text-[11px] text-white/55">
-              After saving, you’ll be routed back to login automatically.
-            </div>
-          </>
-        )}
+        <div className="mt-3 text-[11px] text-white/55">
+          After saving, you’ll be routed back to login automatically.
+        </div>
       </div>
     </div>
   )
