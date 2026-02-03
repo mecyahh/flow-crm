@@ -206,33 +206,26 @@ export default function PostDealPage() {
       }
 
             const payload: any = {
-        agent_id: uid,
-        user_id: uid,
+  agent_id: uid,
+  user_id: uid,
+  full_name: nameClean,
+  phone: phoneDigits ? phoneDigits : null,
+  dob: dob || null,
+  company: company.trim(),
+  policy_number: pol || null,
+  coverage: covNum,
+  premium: premNum,
+  status: 'submitted',
 
-        full_name: nameClean,
-        // store normalized digits to enforce uniqueness going forward
-        phone: phoneDigits ? phoneDigits : null,
-        dob: dob || null,
-        company: company.trim(),
-        policy_number: pol || null,
-        coverage: covNum,
-        premium: premNum,
+  source: source, // ✅ THIS makes the donut show it
 
-        status: 'submitted',
-
-        // ✅ NEW: store selected source into deals.source column
-        source: source,
-
-        // ✅ store extra fields without new columns
-        // ✅ formatted so Discord line 2 is ALWAYS correct:
-        // product + source + referrals (effective is included but stripped by webhook)
-        note: buildNote({
-          product_name,
-          effective_date,
-          referrals_collected: refs,
-          source,
-        }),
-      }
+  note: buildNote({
+    product_name,
+    effective_date,
+    referrals_collected: refs,
+    source,
+  }),
+}
 
       const { data: inserted, error } = await supabase.from('deals').insert(payload).select('id').single()
       if (error) throw new Error(error.message)
