@@ -205,7 +205,7 @@ export default function PostDealPage() {
         return
       }
 
-      const payload: any = {
+            const payload: any = {
         agent_id: uid,
         user_id: uid,
 
@@ -219,6 +219,9 @@ export default function PostDealPage() {
         premium: premNum,
 
         status: 'submitted',
+
+        // ✅ NEW: store selected source into deals.source column
+        source: source,
 
         // ✅ store extra fields without new columns
         // ✅ formatted so Discord line 2 is ALWAYS correct:
