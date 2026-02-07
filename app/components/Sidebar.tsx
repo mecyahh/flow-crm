@@ -13,6 +13,7 @@ const NAV = [
   { label: 'Post a Deal', href: '/post-deal' },
   { label: 'Deal House', href: '/deal-house' },
   { label: 'Follow Ups', href: '/follow-ups' },
+  { label: 'Debt Management', href: '/debt-management' },
   { label: 'Analytics', href: '/analytics' },
   { label: 'Settings', href: '/settings' },
 ]
