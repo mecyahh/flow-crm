@@ -702,7 +702,7 @@ const lineValues = useMemo(() => last7.map((x) => x.ap), [last7])
               value={loading ? '—' : `$${formatMoney(production)}`}
             />
             <MiniStat label="Writing Agents" value={loading ? '—' : String(writingAgents)} />
-            <MiniStat label="Deals Submitted" value={loading ? '—' : String(dealsSubmitted)} />
+            <MiniStat label="Families Protected" value={loading ? '—' : String(familiesProtected)} />
           </section>
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
