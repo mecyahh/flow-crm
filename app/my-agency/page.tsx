@@ -348,7 +348,7 @@ export default function MyAgencyPage() {
     })
 
     if (miscNoAgencyAp > 0) {
-      labels.push('No Agency Yet (Direct)')
+      labels.push('Directs')
       values.push(miscNoAgencyAp)
     }
 
