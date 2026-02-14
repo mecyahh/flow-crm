@@ -266,7 +266,27 @@ export default function DealHousePage() {
     setToast('Saved ✅')
     loadDeals()
   }
+// ✅ DELETE (removes from Supabase + refreshes table + affects leaderboard/team automatically)
+async function deleteDeal(dealId: string) {
+  const ok = window.confirm('Delete this deal permanently? This cannot be undone.')
+  if (!ok) return
 
+  setToast(null)
+
+  const { error } = await supabase.from('deals').delete().eq('id', dealId)
+  if (error) {
+    setToast(error.message || 'Delete failed')
+    return
+  }
+
+  // ✅ instantly remove from UI too (no waiting)
+  setRows((prev) => prev.filter((r) => r.id !== dealId))
+
+  setToast('Deleted ✅')
+
+  // optional: keep everything in sync (safe)
+  loadDeals()
+}
   async function saveFolder() {
     if (!folderDeal) return
 
@@ -581,7 +601,14 @@ export default function DealHousePage() {
                             >
                               <GlassPencilIcon />
                             </button>
-
+<button
+  onClick={() => deleteDeal(d.id)}
+  className={iconBtn}
+  title="Delete"
+>
+  <GlassTrashIcon />
+</button>
+                            
                             <button onClick={() => setFolderDeal(d)} className={iconBtn} title="Folder">
                               <GlassFolderIcon />
                             </button>
@@ -949,6 +976,39 @@ function GlassPencilIcon() {
         />
         <path
           d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"
+          stroke="rgba(255,255,255,0.75)"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  )
+}
+
+function GlassTrashIcon() {
+  return (
+    <span className="inline-flex items-center justify-center w-5 h-5">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M4 7h16"
+          stroke="rgba(255,255,255,0.75)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <path
+          d="M10 11v7M14 11v7"
+          stroke="rgba(255,255,255,0.55)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <path
+          d="M6.5 7l1 14a2 2 0 0 0 2 1.8h5a2 2 0 0 0 2-1.8l1-14"
+          stroke="rgba(255,255,255,0.75)"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M9 7V4.7A1.7 1.7 0 0 1 10.7 3h2.6A1.7 1.7 0 0 1 15 4.7V7"
           stroke="rgba(255,255,255,0.75)"
           strokeWidth="1.6"
           strokeLinejoin="round"
