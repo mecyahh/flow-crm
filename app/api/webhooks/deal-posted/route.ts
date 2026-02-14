@@ -60,7 +60,6 @@ export async function POST(req: Request) {
     // product (stored in note). Strip any "Effective" text permanently.
     const note = String((deal as any).note || '')
     const productMatch = note.match(/product_name:\s*(.+)/i) || note.match(/Product:\s*(.+)/i)
-
     const rawProduct = (productMatch?.[1] || '').trim()
 
     const product = rawProduct
@@ -71,7 +70,7 @@ export async function POST(req: Request) {
     const carrierLine = [String(deal.company || '').trim(), product].filter(Boolean).join(' ').trim()
 
     // ✅ AP RULE: annual premium = premium * 12
-    const premiumNum = toPremium(deal.premium)
+    const premiumNum = toPremium((deal as any).premium)
     const ap = premiumNum * 12
 
     // weekly ranking (sum AP per user for current week)
@@ -105,9 +104,14 @@ export async function POST(req: Request) {
     const rankNum = rankIdx >= 0 ? rankIdx + 1 : null
     const rankText = rankNum ? `${rankEmoji(rankNum)} ${ordinal(rankNum)} place` : '—'
 
-    // webhook url
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL
-    if (!webhookUrl) return NextResponse.json({ ok: true, skipped: 'No webhook url set' })
+    // ✅ webhook urls (fan-out to up to 3 channels)
+    const urls = [
+      process.env.DISCORD_WEBHOOK_URL,
+      process.env.DISCORD_WEBHOOK_URL_2,
+      process.env.DISCORD_WEBHOOK_URL_3,
+    ].filter(Boolean) as string[]
+
+    if (!urls.length) return NextResponse.json({ ok: true, skipped: 'No webhook url set' })
 
     // ✅ Clean format (no labels), final line stays "Ranking: ..."
     const text =
@@ -116,13 +120,17 @@ export async function POST(req: Request) {
       `AP: $${money(ap)}\n` +
       `Ranking: ${rankText}`
 
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text }),
-    })
+    await Promise.all(
+      urls.map((url) =>
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: text }),
+        }).catch(() => null)
+      )
+    )
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, posted_to: urls.length })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Webhook failed' }, { status: 500 })
   }
