@@ -37,10 +37,10 @@ export async function POST(req: Request) {
     const dealId = String(body.deal_id || '').trim()
     if (!dealId) return NextResponse.json({ error: 'deal_id required' }, { status: 400 })
 
-    // deal
+    // deal (✅ INCLUDE source)
     const { data: deal, error: dErr } = await supabaseAdmin
       .from('deals')
-      .select('id,user_id,company,premium,note,created_at')
+      .select('id,user_id,company,premium,note,created_at,source')
       .eq('id', dealId)
       .single()
 
@@ -94,8 +94,7 @@ export async function POST(req: Request) {
       const uid = r.user_id
       if (!uid) return
       const prem = toPremium(r.premium)
-      const apVal = prem * 12
-      map.set(uid, (map.get(uid) || 0) + apVal)
+      map.set(uid, (map.get(uid) || 0) + prem * 12)
     })
 
     const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1])
@@ -104,21 +103,29 @@ export async function POST(req: Request) {
     const rankNum = rankIdx >= 0 ? rankIdx + 1 : null
     const rankText = rankNum ? `${rankEmoji(rankNum)} ${ordinal(rankNum)} place` : '—'
 
-    // ✅ webhook urls (fan-out to up to 3 channels)
-    const urls = [
-      process.env.DISCORD_WEBHOOK_URL,
-      process.env.DISCORD_WEBHOOK_URL_2,
-      process.env.DISCORD_WEBHOOK_URL_3,
-    ].filter(Boolean) as string[]
-
-    if (!urls.length) return NextResponse.json({ ok: true, skipped: 'No webhook url set' })
-
-    // ✅ Clean format (no labels), final line stays "Ranking: ..."
+    // ✅ Message
     const text =
       `${userName}\n` +
       `${carrierLine || String(deal.company || '').trim()}\n` +
       `AP: $${money(ap)}\n` +
       `Ranking: ${rankText}`
+
+    // ✅ Always post to main 3 channels
+    const baseUrls = [
+      process.env.DISCORD_WEBHOOK_URL,
+      process.env.DISCORD_WEBHOOK_URL_2,
+      process.env.DISCORD_WEBHOOK_URL_3,
+    ].filter(Boolean) as string[]
+
+    // ✅ Conditionally post to inbound channel #4 if source is inbound
+    const source = String((deal as any).source || '').trim().toLowerCase()
+    const inboundUrl = process.env.DISCORD_WEBHOOK_URL_INBOUND
+    const extraUrls =
+      source === 'inbound' && inboundUrl ? [inboundUrl] : []
+
+    const urls = [...baseUrls, ...extraUrls]
+
+    if (!urls.length) return NextResponse.json({ ok: true, skipped: 'No webhook url set' })
 
     await Promise.all(
       urls.map((url) =>
@@ -130,7 +137,11 @@ export async function POST(req: Request) {
       )
     )
 
-    return NextResponse.json({ ok: true, posted_to: urls.length })
+    return NextResponse.json({
+      ok: true,
+      posted_to: urls.length,
+      inbound_extra: extraUrls.length,
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Webhook failed' }, { status: 500 })
   }
