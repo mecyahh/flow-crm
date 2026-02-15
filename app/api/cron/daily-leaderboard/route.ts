@@ -1,184 +1,147 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-function money0(n: number) {
+function money(n: number) {
   const num = Number(n || 0)
-  return num.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  return num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
-function fmtDateLabel(d: Date) {
-  // "Monday, Feb 10"
-  return d.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: '2-digit',
-  })
+function prettyDay(d: Date) {
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit' })
 }
 
-function medal(i: number) {
-  if (i === 0) return '🥇'
-  if (i === 1) return '🥈'
-  if (i === 2) return '🥉'
-  return `${i + 1}.`
+function nyNow() {
+  // Use "America/New_York" wall clock
+  const s = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+  return new Date(s)
 }
 
-function toAP(premium: any) {
+function startOfDayNY(d: Date) {
+  const s = new Date(d)
+  s.setHours(0, 0, 0, 0)
+  return s
+}
+
+function endOfDayNY(d: Date) {
+  const e = startOfDayNY(d)
+  e.setDate(e.getDate() + 1)
+  return e
+}
+
+function toPremium(p: any) {
   const n =
-    typeof premium === 'number'
-      ? premium
-      : typeof premium === 'string'
-      ? Number(premium.replace(/[^0-9.]/g, ''))
-      : Number(premium || 0)
-  const prem = Number.isFinite(n) ? n : 0
-  return prem * 12
-}
-
-function getNYParts(now = new Date()) {
-  // Pull New York local parts reliably (DST-safe)
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now)
-
-  const get = (t: string) => parts.find((p) => p.type === t)?.value || ''
-  const yyyy = Number(get('year'))
-  const mm = Number(get('month'))
-  const dd = Number(get('day'))
-  const hh = Number(get('hour'))
-  const mi = Number(get('minute'))
-
-  return { yyyy, mm, dd, hh, mi }
-}
-
-function buildNYBoundsISO(yyyy: number, mm: number, dd: number) {
-  // Create [start,end) for that NY day in UTC ISO strings
-  // We do it by constructing a date string and letting Postgres handle timezone conversion.
-  // We'll pass these as plain strings and use them in queries as timestamptz.
-  const pad2 = (x: number) => String(x).padStart(2, '0')
-  const day = `${yyyy}-${pad2(mm)}-${pad2(dd)}`
-  const startNY = `${day} 00:00:00 America/New_York`
-  const endNY = `${day} 00:00:00 America/New_York +1 day`
-  return { startNY, endNY, dayISO: day }
+    typeof p === 'number'
+      ? p
+      : typeof p === 'string'
+      ? Number(p.replace(/[^0-9.]/g, ''))
+      : Number(p || 0)
+  return Number.isFinite(n) ? n : 0
 }
 
 export async function GET(req: Request) {
   try {
-    // ✅ Protect endpoint (so random people can't trigger it)
-    const secret = process.env.CRON_SECRET || ''
-    const got = new URL(req.url).searchParams.get('secret') || ''
-    if (!secret || got !== secret) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const url = new URL(req.url)
+    const force = url.searchParams.get('force') === '1'
+    const dry = url.searchParams.get('dry') === '1'
+    const manual = url.searchParams.get('manual') === '1'
 
-    const { yyyy, mm, dd, hh, mi } = getNYParts(new Date())
+    // ✅ schedule guard: only allow 8:00pm ET unless force/manual
+    const nowNY = nyNow()
+    const hr = nowNY.getHours()
+    const min = nowNY.getMinutes()
+    const isScheduled = hr === 20 && min === 0
 
-    // ✅ Only fire exactly at 15:00 or 21:00 NY time
-    const is3pm = hh === 15 && mi === 0
-    const is8pm = hh === 20 && mi === 0
-if (!is3pm && !is8pm) {
-  return NextResponse.json({ ok: true, skipped: 'not scheduled minute', ny: { yyyy, mm, dd, hh, mi } })
-}
-
-const slot = is3pm ? '3pm' : '8pm'
-    const { startNY, endNY, dayISO } = buildNYBoundsISO(yyyy, mm, dd)
-
-    // ✅ Idempotency: if already posted for this date+slot, do nothing
-    const { data: existing } = await supabaseAdmin
-      .from('leaderboard_posts')
-      .select('id')
-      .eq('local_date', dayISO)
-      .eq('slot', slot)
-      .limit(1)
-
-    if (existing && existing.length) {
-      return NextResponse.json({ ok: true, skipped: 'already posted', local_date: dayISO, slot })
+    if (!force && !manual && !isScheduled) {
+      return NextResponse.json({ ok: true, skipped: 'not scheduled time', now_et: nowNY.toString() })
     }
 
-    // ✅ Pull today's deals (NY day) and rank by AP
-    const { data: deals, error: dErr } = await supabaseAdmin
+    const dayStart = startOfDayNY(nowNY)
+    const dayEnd = endOfDayNY(nowNY)
+
+    // ✅ Pull today’s deals (all agents who wrote today)
+    const { data: deals, error } = await supabaseAdmin
       .from('deals')
       .select('user_id,premium,created_at')
-      // Postgres will interpret these strings as timestamptz because created_at is timestamptz
-      .gte('created_at', startNY as any)
-      .lt('created_at', endNY as any)
+      .gte('created_at', dayStart.toISOString())
+      .lt('created_at', dayEnd.toISOString())
       .limit(100000)
 
-    if (dErr) {
-      return NextResponse.json({ error: dErr.message }, { status: 400 })
-    }
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
+    // Sum AP per user_id
     const apByUser = new Map<string, number>()
-    let totalAp = 0
-
     ;(deals || []).forEach((r: any) => {
       const uid = r.user_id
       if (!uid) return
-      const ap = toAP(r.premium)
-      totalAp += ap
+      const ap = toPremium(r.premium) * 12
       apByUser.set(uid, (apByUser.get(uid) || 0) + ap)
     })
 
-    const sorted = Array.from(apByUser.entries()).sort((a, b) => b[1] - a[1])
-    const top5 = sorted.slice(0, 5)
+    // Only writers
+    const writers = Array.from(apByUser.entries())
+      .filter(([, ap]) => ap > 0)
+      .sort((a, b) => b[1] - a[1])
 
-    // ✅ Fetch names for top users
-    const ids = top5.map(([uid]) => uid)
-    const nameMap = new Map<string, string>()
+    if (!writers.length) {
+      return NextResponse.json({ ok: true, posted: false, reason: 'no writers today' })
+    }
 
-    if (ids.length) {
-      const { data: profs } = await supabaseAdmin
-        .from('profiles')
-        .select('id,first_name,last_name,email')
-        .in('id', ids)
-        .limit(50)
+    // Fetch names for writers
+    const ids = writers.map(([uid]) => uid)
+    const { data: profs } = await supabaseAdmin
+      .from('profiles')
+      .select('id,first_name,last_name,email')
+      .in('id', ids)
+      .limit(10000)
 
-      ;(profs || []).forEach((p: any) => {
-        const n = `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim()
-        nameMap.set(p.id, n || (p.email ? String(p.email).split('@')[0] : 'Agent'))
+    const nameById = new Map<string, string>()
+    ;(profs || []).forEach((p: any) => {
+      const n = `${(p.first_name || '').trim()} ${(p.last_name || '').trim()}`.trim()
+      nameById.set(p.id, n || (p.email ? String(p.email).split('@')[0] : 'Agent'))
+    })
+
+    const lines: string[] = []
+    lines.push(`🎖️DAILY LEADERBOARD🎖️`)
+    lines.push(`${prettyDay(nowNY)}`)
+    lines.push('')
+
+    writers.forEach(([uid, ap], idx) => {
+      const name = nameById.get(uid) || 'Agent'
+      const rank = idx + 1
+      const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : ''
+      const prefix = medal ? `${medal} ${rank}.` : `${rank}.`
+      lines.push(`${prefix} ${name} — $${money(ap)} AP`)
+    })
+
+    const totalAp = writers.reduce((s, [, ap]) => s + ap, 0)
+    lines.push('')
+    lines.push('—————————')
+    lines.push(`🔥 Total AP Today: $${money(totalAp)}`)
+
+    const content = lines.join('\n')
+
+    if (dry) {
+      return NextResponse.json({
+        ok: true,
+        dry: true,
+        writers: writers.length,
+        total_ap: totalAp,
+        preview: content,
       })
     }
 
-    // ✅ Build message in your exact format
-    const labelDate = fmtDateLabel(new Date(`${dayISO}T12:00:00Z`)) // stable label
-    const header = `🎖️DAILY LEADERBOARD🎖️\n${labelDate}\n\n`
+    // ✅ Post ONLY to original webhook (your main channel)
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+    if (!webhookUrl) return NextResponse.json({ ok: true, posted: false, skipped: 'No DISCORD_WEBHOOK_URL set' })
 
-    const lines =
-      top5.length === 0
-        ? ['No deals posted today.']
-        : top5.map(([uid, ap], i) => {
-            const nm = nameMap.get(uid) || 'Agent'
-            const prefix = i < 3 ? `${medal(i)} ${i + 1}.` : `${i + 1}.`
-            // NOTE: your sample includes "🥇 1." etc — keep that
-            const shownPrefix = i < 3 ? `${medal(i)} ${i + 1}.` : `${i + 1}.`
-            return `${shownPrefix} ${nm} — $${money0(ap)} AP`
-          })
-
-    const footer = `\n\n—————————\n🔥 Total AP Today: $${money0(totalAp)}`
-
-    const text = header + lines.join('\n') + footer
-
-    // ✅ Post ONLY to original webhook
-    const url = process.env.DISCORD_WEBHOOK_URL
-    if (!url) return NextResponse.json({ ok: true, skipped: 'DISCORD_WEBHOOK_URL not set' })
-
-    await fetch(url, {
+    await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text }),
+      body: JSON.stringify({ content }),
     })
 
-    // ✅ Record that we posted (prevents duplicates)
-    await supabaseAdmin.from('leaderboard_posts').insert({
-      local_date: dayISO,
-      slot,
-      payload: text,
-    })
-
-    return NextResponse.json({ ok: true, posted: true, local_date: dayISO, slot })
+    return NextResponse.json({ ok: true, posted: true, writers: writers.length, total_ap: totalAp })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'leaderboard cron failed' }, { status: 500 })
+    return NextResponse.json({ error: e?.message || 'leaderboard failed' }, { status: 500 })
   }
 }
