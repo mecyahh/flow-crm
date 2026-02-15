@@ -1,16 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/leaderboard?secret=${CRON_SECRET}",
-      "schedule": "0 20 * * *"
-    },
-    {
-      "path": "/api/cron/leaderboard?secret=${CRON_SECRET}",
-      "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/agency-email?secret=${CRON_SECRET}",
-      "schedule": "0 2 * * *"
+      "path": "/api/cron/daily-leaderboard?secret=YOUR_CRON_SECRET",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
