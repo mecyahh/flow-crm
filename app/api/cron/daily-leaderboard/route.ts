@@ -77,12 +77,12 @@ export async function GET(req: Request) {
 
     // ✅ Only fire exactly at 15:00 or 21:00 NY time
     const is3pm = hh === 15 && mi === 0
-    const is9pm = hh === 21 && mi === 0
-    if (!is3pm && !is9pm) {
-      return NextResponse.json({ ok: true, skipped: 'not scheduled minute', ny: { yyyy, mm, dd, hh, mi } })
-    }
+    const is8pm = hh === 20 && mi === 0
+if (!is3pm && !is8pm) {
+  return NextResponse.json({ ok: true, skipped: 'not scheduled minute', ny: { yyyy, mm, dd, hh, mi } })
+}
 
-    const slot = is3pm ? '3pm' : '9pm'
+const slot = is3pm ? '3pm' : '8pm'
     const { startNY, endNY, dayISO } = buildNYBoundsISO(yyyy, mm, dd)
 
     // ✅ Idempotency: if already posted for this date+slot, do nothing
