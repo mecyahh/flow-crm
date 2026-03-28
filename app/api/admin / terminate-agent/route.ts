@@ -3,7 +3,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export async function POST(req: Request) {
   try {
-    const { user_id } = await req.json()
+    const body = await req.json()
+    const user_id = String(body.user_id || '').trim()
 
     if (!user_id) {
       return NextResponse.json({ error: 'user_id required' }, { status: 400 })
@@ -22,8 +23,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true })
-
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    return NextResponse.json({ error: e?.message || 'Terminate failed' }, { status: 500 })
   }
 }
