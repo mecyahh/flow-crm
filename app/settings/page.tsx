@@ -304,7 +304,12 @@ export default function SettingsPage() {
   async function loadAgents(rootId?: string) {
     setLoadingAgents(true)
     try {
-      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(5000)
+const { data, error } = await supabase
+  .from('profiles')
+  .select('*')
+  .eq('is_active', true)
+  .order('created_at', { ascending: false })
+  .limit(5000)
       if (error) throw error
 
       const all = (data || []) as Profile[]
@@ -1116,30 +1121,32 @@ export default function SettingsPage() {
                       </button>
 
                       <button
-                        type="button"
-                        onClick={async () => {
-                          const ok = window.confirm(`Delete ${name}? This removes Auth + Profile.`)
-                          if (!ok) return
-                          try {
-                            const token = await authHeader()
-                            const res = await fetch('/api/admin/users/delete', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json', Authorization: token },
-                              body: JSON.stringify({ user_id: a.id }),
-                            })
-                            const json = await res.json().catch(() => ({}))
-                            if (!res.ok) throw new Error(json.error || 'Delete failed')
-                            setToast('User deleted ✅')
-                            await loadAgents()
-                          } catch (e: any) {
-                            setToast(errMsg(e))
-                          }
-                        }}
-                        className="rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2 border border-white/10"
-                        title="Delete"
-                      >
-                        <IconTrash />
-                      </button>
+  type="button"
+  onClick={async () => {
+    const ok = window.confirm(`Terminate ${name}? They will be removed from Flow but all production and deals will remain.`)
+    if (!ok) return
+
+    try {
+      const res = await fetch('/api/admin/terminate-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: a.id }),
+      })
+
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Terminate failed')
+
+      setToast('Agent terminated ✅')
+      await loadAgents()
+    } catch (e: any) {
+      setToast(errMsg(e))
+    }
+  }}
+  className="rounded-xl bg-white/5 hover:bg-red-600/20 transition px-2.5 py-2 border border-white/10"
+  title="Terminate Agent"
+>
+  <IconTrash />
+</button>
                     </div>
                   </div>
                 )
